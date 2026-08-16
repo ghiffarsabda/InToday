@@ -1,5 +1,19 @@
+export type FactCategory =
+  | 'science'
+  | 'economics'
+  | 'law'
+  | 'psychology'
+  | 'history_world'
+  | 'history_indonesia'
+  | 'religions'
+  | 'islam'
+  | 'health'
+  | 'music'
+  | 'movie'
+  | 'pop_culture';
+
 export interface FactItem {
-  category: 'general' | 'economics' | 'law' | 'psychology';
+  category: FactCategory;
   categoryLabel: string;
   emoji: string;
   title: string;
