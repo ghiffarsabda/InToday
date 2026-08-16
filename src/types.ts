@@ -43,6 +43,10 @@ export interface Env {
   ORCAROUTER_API_KEY?: string;
   RESEND_API_KEY: string;
 
+  // Gmail SMTP Direct Dispatch
+  GMAIL_USER?: string;
+  GMAIL_APP_PASSWORD?: string;
+
   // Environment variables
   FROM_EMAIL?: string;
   OPENROUTER_BASE_URL?: string;

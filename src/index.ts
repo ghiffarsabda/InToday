@@ -919,6 +919,10 @@ export default {
           <span class="val">${env.GEMINI_MODEL || 'gemini-3.1-flash-lite'} (Google Gemini)</span>
         </li>
         <li>
+          <span class="label">Email Engine</span>
+          <span class="val">${env.GMAIL_USER ? 'Gmail SMTP (Direct from ' + env.GMAIL_USER + ')' : 'Resend API'}</span>
+        </li>
+        <li>
           <span class="label">Database Memory</span>
           <span class="val">${historyRecords.length > 0 ? 'Active (Cloudflare D1 SQLite)' : 'Initializing...'}</span>
         </li>
@@ -961,7 +965,7 @@ export default {
           <div id="st-1" class="step-item step-active">⏳ 1. Checking Cloudflare D1 history for topic deduplication...</div>
           <div id="st-2" class="step-item">⏳ 2. Synthesizing 7 fresh micro-insights with Gemini 3.1 Flash-Lite...</div>
           <div id="st-3" class="step-item">⏳ 3. Saving generated insights to database history...</div>
-          <div id="st-4" class="step-item">⏳ 4. Dispatching email to all subscribers via Resend...</div>
+          <div id="st-4" class="step-item">⏳ 4. Dispatching email to all subscribers...</div>
         </div>
 
         <div id="p-result" style="display: none; margin-top: 14px; padding: 12px; border-radius: 6px; font-size: 12px; font-family: monospace; white-space: pre-wrap;"></div>
@@ -997,7 +1001,7 @@ export default {
       st3.className = 'step-item';
       st3.textContent = '⏳ 3. Saving generated insights to database history...';
       st4.className = 'step-item';
-      st4.textContent = '⏳ 4. Dispatching email to all subscribers via Resend...';
+      st4.textContent = '⏳ 4. Dispatching email to all subscribers...';
 
       bar.style.width = '25%';
       bar.style.background = '#238636';

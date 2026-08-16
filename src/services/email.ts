@@ -2,6 +2,7 @@ import { Resend } from 'resend';
 import { Env, NewsletterData } from '../types';
 import { GeneratedContent } from './facts';
 import { renderNewsletterHtml, renderNewsletterText } from '../templates/newsletter';
+import { sendEmailViaGmailSmtp } from './smtp';
 
 export interface SendResult {
   success: boolean;
@@ -15,16 +16,9 @@ export async function sendDailyNewsletter(
   content: GeneratedContent,
   recipients: string[]
 ): Promise<SendResult> {
-  if (!env.RESEND_API_KEY) {
-    throw new Error('RESEND_API_KEY is not configured in worker environment.');
-  }
-
   if (!recipients || recipients.length === 0) {
     throw new Error('No recipient email addresses provided in config.');
   }
-
-  const resend = new Resend(env.RESEND_API_KEY);
-  const fromEmail = env.FROM_EMAIL || 'InToday Newsletter <onboarding@resend.dev>';
 
   const date = new Date();
   const formattedDate = date.toLocaleDateString('en-US', {
@@ -45,8 +39,56 @@ export async function sendDailyNewsletter(
   const text = renderNewsletterText(newsletterData);
   const subject = `InToday · Daily Briefing (${formattedDate})`;
 
+  // =========================================================================
+  // 1. PRIMARY DISPATCH: Gmail SMTP (Sends directly from ghiffarsabda@gmail.com)
+  // =========================================================================
+  if (env.GMAIL_USER && env.GMAIL_APP_PASSWORD) {
+    console.log(`[Gmail SMTP] Dispatching newsletter to ${recipients.length} recipient(s) directly from ${env.GMAIL_USER}...`);
+    const smtpRes = await sendEmailViaGmailSmtp(
+      {
+        user: env.GMAIL_USER,
+        pass: env.GMAIL_APP_PASSWORD,
+        fromName: 'InToday Newsletter'
+      },
+      {
+        to: recipients,
+        subject,
+        html,
+        text
+      }
+    );
+
+    if (smtpRes.success) {
+      console.log(`[Gmail SMTP] ✓ Successfully dispatched to all ${recipients.length} subscriber(s)!`);
+      return {
+        success: true,
+        recipientsCount: recipients.length,
+        data: smtpRes.data
+      };
+    } else {
+      console.warn(`[Gmail SMTP] ✗ Gmail SMTP dispatch failed:`, smtpRes.error);
+      // If Gmail fails, we can fall back to Resend if configured
+      if (!env.RESEND_API_KEY) {
+        return {
+          success: false,
+          recipientsCount: 0,
+          error: `Gmail SMTP Error: ${smtpRes.error}`
+        };
+      }
+    }
+  }
+
+  // =========================================================================
+  // 2. FALLBACK DISPATCH: Resend API
+  // =========================================================================
+  if (!env.RESEND_API_KEY) {
+    throw new Error('Neither Gmail SMTP (GMAIL_USER + GMAIL_APP_PASSWORD) nor RESEND_API_KEY is configured.');
+  }
+
+  const resend = new Resend(env.RESEND_API_KEY);
+  const fromEmail = env.FROM_EMAIL || 'InToday Newsletter <onboarding@resend.dev>';
+
   try {
-    // 1. Try single batch delivery
     const batchResponse = await resend.emails.send({
       from: fromEmail,
       to: recipients,
@@ -64,9 +106,8 @@ export async function sendDailyNewsletter(
     }
 
     console.warn('[Resend Batch] Batch dispatch rejected:', batchResponse.error.message);
-    console.log('[Resend Fallback] Attempting resilient individual delivery for verified recipients...');
 
-    // 2. Resilient fallback: deliver to verified recipients individually
+    // Resilient fallback: deliver to verified recipients individually
     const successfulSends: string[] = [];
     const failedSends: Array<{ email: string; reason: string }> = [];
 
@@ -82,10 +123,8 @@ export async function sendDailyNewsletter(
 
         if (!indRes.error) {
           successfulSends.push(email);
-          console.log(`[Resend] ✓ Delivered successfully to: ${email}`);
         } else {
           failedSends.push({ email, reason: indRes.error.message });
-          console.warn(`[Resend] ✗ Could not deliver to ${email}:`, indRes.error.message);
         }
       } catch (e: any) {
         failedSends.push({ email, reason: e?.message || String(e) });
@@ -100,7 +139,7 @@ export async function sendDailyNewsletter(
           deliveredTo: successfulSends,
           failedDeliveries: failedSends,
           notice: failedSends.length > 0
-            ? 'Resend sandbox mode delivered to account owner. To send to third-party emails, verify your domain at resend.com/domains and set FROM_EMAIL.'
+            ? 'Resend sandbox mode delivered to account owner. Set up GMAIL_USER + GMAIL_APP_PASSWORD for direct unrestricted sending.'
             : undefined
         }
       };
