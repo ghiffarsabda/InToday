@@ -3,14 +3,9 @@ export type FactCategory =
   | 'economics'
   | 'law'
   | 'psychology'
-  | 'history_world'
-  | 'history_indonesia'
-  | 'religions'
+  | 'history'
   | 'islam'
-  | 'health'
-  | 'music'
-  | 'movie'
-  | 'pop_culture';
+  | 'health';
 
 export interface FactItem {
   category: FactCategory;
@@ -19,7 +14,8 @@ export interface FactItem {
   title: string;
   fact: string;
   explanation: string;
-  example: string;
+  actionOrExampleLabel?: string; // "💡 Real-world case:", "✨ Faith in Action:", "⚡ Do this today:"
+  example: string; // The action or example text
 }
 
 export interface GlossaryItem {

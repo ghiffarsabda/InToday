@@ -6,14 +6,21 @@ const FONT_STACK = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Not
  * Renders the newsletter in clean GitHub README markdown style.
  * Layout:
  * 1. Header
- * 2. 4 Mind-Expanding Fun Facts (General, Economics, Law, Psychology)
+ * 2. 7 Mind-Expanding & Actionable Insights:
+ *    - 🔬 Science
+ *    - 📈 Economics
+ *    - ⚖️ Law & Governance
+ *    - 🧠 Psychology
+ *    - 🏛️ History
+ *    - 🌙 Islam (Actionable spiritual advice)
+ *    - 🩺 Health (Actionable wellness habit)
  * 3. Glossary (New words learned today)
  * 4. Footer
  */
 export function renderNewsletterHtml(data: NewsletterData): string {
   const { formattedDate, facts, glossary } = data;
 
-  // 1. Format Fun Facts Section
+  // 1. Format Insights Section
   const factsHtml = facts.map((fact) => `
     <div style="margin-bottom: 26px;">
       <h3 style="font-family: ${FONT_STACK}; font-size: 16px; font-weight: 600; line-height: 1.35; color: #1f2328; margin: 0 0 8px 0;">
@@ -31,7 +38,7 @@ export function renderNewsletterHtml(data: NewsletterData): string {
       </p>
 
       <div style="margin: 0 0 12px 0; padding: 8px 12px; background-color: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; font-family: ${FONT_STACK}; font-size: 13px; line-height: 1.5; color: #24292f;">
-        <strong style="font-weight: 600; color: #0969da;">💡 Real-world case:</strong> ${fact.example}
+        <strong style="font-weight: 600; color: #0969da;">${fact.actionOrExampleLabel || '💡 Real-world case:'}</strong> ${fact.example}
       </div>
     </div>
   `).join('');
@@ -70,13 +77,13 @@ export function renderNewsletterHtml(data: NewsletterData): string {
 
     <blockquote style="margin: 0 0 24px 0; padding: 0 1em; color: #57606a; border-left: 0.25em solid #d0d7de; font-family: ${FONT_STACK}; font-size: 14px; font-weight: 400; line-height: 1.5;">
       <p style="margin: 0;">
-        Your daily dose of mind-expanding facts, real-world examples, and new concepts explained in plain English.
+        Your daily briefing: 7 mind-expanding micro-insights, actionable life advice, and new concepts in plain English.
       </p>
     </blockquote>
 
-    <!-- 1. ## ✨ Daily Mind-Expanding Fun Facts -->
+    <!-- 1. ## ✨ Daily Mind-Expanding & Actionable Insights -->
     <h2 style="font-family: ${FONT_STACK}; font-size: 20px; font-weight: 600; line-height: 1.25; color: #1f2328; margin: 32px 0 16px 0; padding-bottom: 0.3em; border-bottom: 1px solid #d0d7de;">
-      ✨ Daily Mind-Expanding Facts
+      ✨ Daily Micro-Insights &amp; Actions
     </h2>
     ${factsHtml}
 
@@ -116,15 +123,15 @@ export function renderNewsletterText(data: NewsletterData): string {
   const { formattedDate, facts, glossary } = data;
 
   let text = `# InToday · ${formattedDate}\n\n`;
-  text += `> Your daily dose of mind-expanding facts and concepts.\n\n`;
+  text += `> Your daily briefing: 7 mind-expanding micro-insights, actionable advice, and key concepts.\n\n`;
 
   // 1. Facts
-  text += `## ✨ Daily Mind-Expanding Facts\n\n`;
+  text += `## ✨ Daily Micro-Insights & Actions\n\n`;
   for (const fact of facts) {
     text += `### ${fact.emoji} ${fact.categoryLabel}: ${fact.title}\n\n`;
     text += `> ${fact.fact}\n\n`;
     text += `${fact.explanation}\n\n`;
-    text += `💡 Real-world case: ${fact.example}\n\n`;
+    text += `${fact.actionOrExampleLabel || '💡 Real-world case:'} ${fact.example}\n\n`;
   }
   text += `---\n\n`;
 
