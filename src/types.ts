@@ -4,21 +4,28 @@ export interface FactItem {
   emoji: string;
   title: string;
   fact: string;
-  detail: string;
+  explanation: string;
+  example: string;
+}
+
+export interface GlossaryItem {
+  term: string;
+  definition: string;
 }
 
 export interface NewsletterData {
   date: string;
   formattedDate: string;
   facts: FactItem[];
+  glossary: GlossaryItem[];
 }
 
 export interface Env {
-  // Secrets (stored via wrangler secret put or .dev.vars)
+  // Secrets
   ORCAROUTER_API_KEY: string;
   RESEND_API_KEY: string;
 
-  // Environment variables (from wrangler.jsonc or .dev.vars)
+  // Environment variables
   FROM_EMAIL?: string;
   ORCAROUTER_BASE_URL?: string;
   ORCAROUTER_MODEL?: string;

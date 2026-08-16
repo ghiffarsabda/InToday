@@ -1,11 +1,11 @@
-import { Env, FactItem } from './types';
+import { Env } from './types';
 import { RECIPIENT_EMAILS } from './config';
-import { fetchDailyFacts } from './services/facts';
+import { fetchDailyContent, getCuratedContentFallback, GeneratedContent } from './services/facts';
 import { sendDailyNewsletter } from './services/email';
 import { renderNewsletterHtml } from './templates/newsletter';
 
-// In-memory cache for today's generated facts to make subsequent requests instant
-let cachedFacts: { dateKey: string; facts: FactItem[] } | null = null;
+// In-memory cache for today's generated content to make subsequent requests instant
+let cachedContent: { dateKey: string; content: GeneratedContent } | null = null;
 
 export default {
   /**
@@ -18,16 +18,16 @@ export default {
     ctx.waitUntil(
       (async () => {
         try {
-          console.log('[InToday Cron] Fetching daily facts from OrcaRouter...');
-          const facts = await fetchDailyFacts(env);
-          console.log(`[InToday Cron] Generated ${facts.length} facts successfully.`);
+          console.log('[InToday Cron] Fetching daily content from OrcaRouter...');
+          const content = await fetchDailyContent(env);
+          console.log(`[InToday Cron] Generated ${content.facts.length} facts and ${content.glossary.length} glossary terms.`);
 
           // Update cache
           const todayKey = new Date().toISOString().split('T')[0];
-          cachedFacts = { dateKey: todayKey, facts };
+          cachedContent = { dateKey: todayKey, content };
 
           console.log(`[InToday Cron] Dispatching email to ${RECIPIENT_EMAILS.length} recipients...`);
-          const result = await sendDailyNewsletter(env, facts, RECIPIENT_EMAILS);
+          const result = await sendDailyNewsletter(env, content, RECIPIENT_EMAILS);
 
           if (result.success) {
             console.log('[InToday Cron] Email sent successfully:', JSON.stringify(result.data));
@@ -54,19 +54,19 @@ export default {
     if (path === '/preview') {
       try {
         const isLiveRequested = url.searchParams.get('live') === 'true';
-        let facts: FactItem[];
+        let content: GeneratedContent;
         let isLiveGenerated = false;
 
         if (isLiveRequested) {
-          facts = await fetchDailyFacts(env);
-          cachedFacts = { dateKey: todayKey, facts };
+          content = await fetchDailyContent(env);
+          cachedContent = { dateKey: todayKey, content };
           isLiveGenerated = true;
-        } else if (cachedFacts && cachedFacts.dateKey === todayKey) {
-          facts = cachedFacts.facts;
+        } else if (cachedContent && cachedContent.dateKey === todayKey) {
+          content = cachedContent.content;
           isLiveGenerated = true;
         } else {
           // Instant default preview with zero wait time
-          facts = getSampleFacts();
+          content = getCuratedContentFallback();
         }
 
         const date = new Date();
@@ -80,12 +80,13 @@ export default {
         let html = renderNewsletterHtml({
           date: todayKey,
           formattedDate,
-          facts
+          facts: content.facts,
+          glossary: content.glossary
         });
 
-        // Add top toolbar banner for preview controls
+        // Minimal sticky top banner for preview controls
         const toolbar = `
-        <div style="background: #161b22; color: #c9d1d9; padding: 10px 16px; border-bottom: 1px solid #30363d; font-family: -apple-system, sans-serif; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000;">
+        <div style="background: #161b22; color: #c9d1d9; padding: 10px 16px; border-bottom: 1px solid #30363d; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <strong style="color: #f0f6fc;">InToday Email Preview:</strong>
             <span style="background: ${isLiveGenerated ? 'rgba(63, 185, 80, 0.2)' : 'rgba(210, 153, 34, 0.2)'}; color: ${isLiveGenerated ? '#3fb950' : '#d29922'}; padding: 2px 7px; border-radius: 12px; font-size: 11px; font-weight: 600;">
@@ -93,7 +94,7 @@ export default {
             </span>
           </div>
           <div style="display: flex; gap: 10px;">
-            ${!isLiveRequested ? '<a href="/preview?live=true" style="background: #238636; color: #ffffff; text-decoration: none; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;">⚡️ Generate Live Facts with AI</a>' : '<a href="/preview" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 5px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">Switch to Instant Sample</a>'}
+            ${!isLiveRequested ? '<a href="/preview?live=true" style="background: #238636; color: #ffffff; text-decoration: none; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;">⚡️ Generate Live with AI</a>' : '<a href="/preview" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 5px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">Switch to Instant Sample</a>'}
             <a href="/" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 5px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">← Dashboard</a>
           </div>
         </div>`;
@@ -115,9 +116,9 @@ export default {
     // 2. Fetch Facts JSON API
     if (path === '/api/facts') {
       try {
-        const facts = await fetchDailyFacts(env);
-        cachedFacts = { dateKey: todayKey, facts };
-        return new Response(JSON.stringify({ success: true, facts }, null, 2), {
+        const content = await fetchDailyContent(env);
+        cachedContent = { dateKey: todayKey, content };
+        return new Response(JSON.stringify({ success: true, content }, null, 2), {
           headers: { 'Content-Type': 'application/json' }
         });
       } catch (err) {
@@ -131,12 +132,12 @@ export default {
     // 3. Manual Email Trigger (POST /send)
     if (path === '/send' && request.method === 'POST') {
       try {
-        console.log('[InToday Manual Trigger] Fetching facts...');
-        const facts = await fetchDailyFacts(env);
-        cachedFacts = { dateKey: todayKey, facts };
+        console.log('[InToday Manual Trigger] Fetching daily content...');
+        const content = await fetchDailyContent(env);
+        cachedContent = { dateKey: todayKey, content };
 
         console.log('[InToday Manual Trigger] Sending email...');
-        const result = await sendDailyNewsletter(env, facts, RECIPIENT_EMAILS);
+        const result = await sendDailyNewsletter(env, content, RECIPIENT_EMAILS);
 
         return new Response(JSON.stringify(result, null, 2), {
           status: result.success ? 200 : 500,
@@ -173,7 +174,7 @@ export default {
       --warning: #d29922;
       --danger: #f85149;
       --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
     }
     * { box-sizing: border-box; }
     body {
@@ -409,43 +410,3 @@ export default {
     });
   }
 };
-
-/**
- * Fallback sample facts for instant preview with zero wait time.
- */
-function getSampleFacts(): FactItem[] {
-  return [
-    {
-      category: 'general',
-      categoryLabel: 'Anything & Everything',
-      emoji: '🌍',
-      title: 'Trees Communicate via Fungal Internet',
-      fact: 'Trees in a forest communicate and share nutrients through an underground mycorrhizal network often called the "Wood Wide Web".',
-      detail: 'Older "mother trees" use this fungal lattice to actively nourish younger saplings that receive less sunlight, and can even send chemical distress signals when attacked by pests.'
-    },
-    {
-      category: 'economics',
-      categoryLabel: 'Economics',
-      emoji: '📈',
-      title: 'The Cobra Effect and Perverse Incentives',
-      fact: 'When British authorities in colonial Delhi offered a bounty for dead cobras to eradicate them, citizens simply began breeding cobras to collect the reward.',
-      detail: 'When the government realized this and canceled the program, breeders released their worthless snakes into the city, leaving Delhi with more cobras than when they started.'
-    },
-    {
-      category: 'law',
-      categoryLabel: 'Law & Governance',
-      emoji: '⚖️',
-      title: 'The Medieval Legal Trial of Animals',
-      fact: 'From the 13th to 18th centuries in Europe, animals accused of crimes were given formal court trials complete with defense lawyers and sworn witnesses.',
-      detail: 'In 1457 in Savigny, France, a pig was formally tried and convicted of murder with defense counsel present, while its piglets were acquitted due to lack of evidence.'
-    },
-    {
-      category: 'psychology',
-      categoryLabel: 'Psychology',
-      emoji: '🧠',
-      title: 'The Pratfall Effect and Perceived Likability',
-      fact: 'Competent individuals become significantly more likable when they make an occasional clumsy mistake, known as the Pratfall Effect.',
-      detail: 'First documented by Elliot Aronson in 1966, the blunder humanizes high achievers and breaks barriers—though if someone is already perceived as mediocre, mistakes merely lower their appeal.'
-    }
-  ];
-}

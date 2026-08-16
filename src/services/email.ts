@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
-import { Env, FactItem, NewsletterData } from '../types';
+import { Env, NewsletterData } from '../types';
+import { GeneratedContent } from './facts';
 import { renderNewsletterHtml, renderNewsletterText } from '../templates/newsletter';
 
 export interface SendResult {
@@ -11,7 +12,7 @@ export interface SendResult {
 
 export async function sendDailyNewsletter(
   env: Env,
-  facts: FactItem[],
+  content: GeneratedContent,
   recipients: string[]
 ): Promise<SendResult> {
   if (!env.RESEND_API_KEY) {
@@ -36,7 +37,8 @@ export async function sendDailyNewsletter(
   const newsletterData: NewsletterData = {
     date: date.toISOString().split('T')[0],
     formattedDate,
-    facts
+    facts: content.facts,
+    glossary: content.glossary
   };
 
   const html = renderNewsletterHtml(newsletterData);
@@ -44,8 +46,6 @@ export async function sendDailyNewsletter(
   const subject = `InToday · Daily Briefing (${formattedDate})`;
 
   try {
-    // Send email via Resend
-    // Note: Resend accepts string or string[] for 'to' field
     const response = await resend.emails.send({
       from: fromEmail,
       to: recipients,

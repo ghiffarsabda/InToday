@@ -3,37 +3,48 @@ import { NewsletterData } from '../types';
 const FONT_STACK = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif";
 
 /**
- * Renders the newsletter adhering strictly to GitHub's markdown typography hierarchy,
- * font sizes, font weights, and spacing.
+ * Renders the newsletter in clean GitHub README markdown style with
+ * easy-to-digest language, real-world examples, and a Glossary section.
  */
 export function renderNewsletterHtml(data: NewsletterData): string {
-  const { formattedDate, facts } = data;
+  const { formattedDate, facts, glossary } = data;
 
   const sectionsHtml = facts.map((fact) => {
     return `
-      <!-- ## ${fact.categoryLabel} (GitHub H2 style) -->
-      <h2 style="font-family: ${FONT_STACK}; font-size: 22px; font-weight: 600; line-height: 1.25; color: #1f2328; margin: 28px 0 16px 0; padding-bottom: 0.3em; border-bottom: 1px solid #d0d7de;">
+      <!-- ## ${fact.categoryLabel} -->
+      <h2 style="font-family: ${FONT_STACK}; font-size: 21px; font-weight: 600; line-height: 1.25; color: #1f2328; margin: 32px 0 14px 0; padding-bottom: 0.3em; border-bottom: 1px solid #d0d7de;">
         ${fact.emoji} ${fact.categoryLabel}
       </h2>
 
-      <!-- ### ${fact.title} (GitHub H3 style) -->
-      <h3 style="font-family: ${FONT_STACK}; font-size: 17px; font-weight: 600; line-height: 1.25; color: #1f2328; margin: 18px 0 10px 0;">
+      <!-- ### ${fact.title} -->
+      <h3 style="font-family: ${FONT_STACK}; font-size: 16.5px; font-weight: 600; line-height: 1.3; color: #1f2328; margin: 16px 0 10px 0;">
         ${fact.title}
       </h3>
 
-      <!-- > Fact Blockquote (GitHub Blockquote style) -->
-      <blockquote style="margin: 0 0 14px 0; padding: 0 1em; color: #57606a; border-left: 0.25em solid #d0d7de; font-family: ${FONT_STACK}; font-size: 15px; font-weight: 400; line-height: 1.6;">
-        <p style="margin: 0; color: #1f2328; font-weight: 500;">
+      <!-- > Core Fact -->
+      <blockquote style="margin: 0 0 14px 0; padding: 0 1em; color: #1f2328; border-left: 0.25em solid #d0d7de; font-family: ${FONT_STACK}; font-size: 14.5px; font-weight: 500; line-height: 1.6;">
+        <p style="margin: 0;">
           ${fact.fact}
         </p>
       </blockquote>
 
-      <!-- Detail Paragraph (GitHub Body style) -->
-      <p style="margin: 0 0 16px 0; font-family: ${FONT_STACK}; font-size: 15px; font-weight: 400; line-height: 1.6; color: #1f2328;">
-        ${fact.detail}
+      <!-- Simple Explanation -->
+      <p style="margin: 0 0 10px 0; font-family: ${FONT_STACK}; font-size: 14.5px; font-weight: 400; line-height: 1.6; color: #1f2328;">
+        ${fact.explanation}
       </p>
+
+      <!-- Real World Case / Example -->
+      <div style="margin: 0 0 16px 0; padding: 10px 14px; background-color: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; font-family: ${FONT_STACK}; font-size: 13.5px; line-height: 1.55; color: #24292f;">
+        <strong style="font-weight: 600; color: #0969da;">💡 Real-world case:</strong> ${fact.example}
+      </div>
     `;
   }).join('');
+
+  const glossaryItemsHtml = (glossary && glossary.length > 0) ? glossary.map(g => `
+    <li style="margin-bottom: 8px; font-family: ${FONT_STACK}; font-size: 14px; line-height: 1.5; color: #1f2328;">
+      <strong style="font-weight: 600; color: #1f2328;">${g.term}:</strong> ${g.definition}
+    </li>
+  `).join('') : '<li style="color: #656d76; font-size: 14px;">No technical terms today!</li>';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -46,31 +57,43 @@ export function renderNewsletterHtml(data: NewsletterData): string {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style type="text/css">
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    body, table, td, p, h1, h2, h3, blockquote, span {
+    body, table, td, p, h1, h2, h3, blockquote, span, li {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif !important;
     }
   </style>
 </head>
-<body style="margin: 0; padding: 32px 16px; background-color: #ffffff; color: #1f2328; font-family: ${FONT_STACK}; font-size: 15px; font-weight: 400; line-height: 1.6; -webkit-font-smoothing: antialiased;">
+<body style="margin: 0; padding: 32px 16px; background-color: #ffffff; color: #1f2328; font-family: ${FONT_STACK}; font-size: 14.5px; font-weight: 400; line-height: 1.6; -webkit-font-smoothing: antialiased;">
   
   <div style="max-width: 680px; margin: 0 auto; background-color: #ffffff;">
     
-    <!-- # InToday (GitHub H1 style) -->
-    <h1 style="font-family: ${FONT_STACK}; font-size: 28px; font-weight: 600; line-height: 1.25; color: #1f2328; margin: 0 0 16px 0; padding-bottom: 0.3em; border-bottom: 1px solid #d0d7de;">
+    <!-- # InToday -->
+    <h1 style="font-family: ${FONT_STACK}; font-size: 26px; font-weight: 600; line-height: 1.25; color: #1f2328; margin: 0 0 14px 0; padding-bottom: 0.3em; border-bottom: 1px solid #d0d7de;">
       InToday &middot; ${formattedDate}
     </h1>
 
-    <!-- > Subtitle Quote -->
     <blockquote style="margin: 0 0 24px 0; padding: 0 1em; color: #57606a; border-left: 0.25em solid #d0d7de; font-family: ${FONT_STACK}; font-size: 14px; font-weight: 400; line-height: 1.5;">
       <p style="margin: 0;">
-        Daily curated micro-insights across everyday reality, economics, law, and psychology.
+        Daily micro-insights in plain, simple English across science, economics, law, and psychology.
       </p>
     </blockquote>
 
     <!-- Content Sections -->
     ${sectionsHtml}
 
-    <!-- Footer Horizontal Rule & Metadata -->
+    <!-- ## 📖 Glossary -->
+    <h2 style="font-family: ${FONT_STACK}; font-size: 21px; font-weight: 600; line-height: 1.25; color: #1f2328; margin: 36px 0 14px 0; padding-bottom: 0.3em; border-bottom: 1px solid #d0d7de;">
+      📖 Glossary
+    </h2>
+
+    <p style="margin: 0 0 10px 0; font-family: ${FONT_STACK}; font-size: 14.5px; font-weight: 600; color: #1f2328;">
+      New words learned today:
+    </p>
+
+    <ul style="margin: 0 0 20px 0; padding-left: 24px;">
+      ${glossaryItemsHtml}
+    </ul>
+
+    <!-- Footer -->
     <hr style="height: 1px; padding: 0; margin: 36px 0 16px 0; background-color: #d0d7de; border: 0;" />
     
     <p style="margin: 0 0 4px 0; font-size: 12px; font-weight: 400; color: #656d76; font-family: ${FONT_STACK};">
@@ -90,17 +113,27 @@ export function renderNewsletterHtml(data: NewsletterData): string {
  * Plaintext version for email clients that do not support HTML.
  */
 export function renderNewsletterText(data: NewsletterData): string {
-  const { formattedDate, facts } = data;
+  const { formattedDate, facts, glossary } = data;
 
   let text = `# InToday · ${formattedDate}\n\n`;
-  text += `> Daily curated micro-insights across everyday reality, economics, law, and psychology.\n\n`;
+  text += `> Daily micro-insights in plain, simple English across science, economics, law, and psychology.\n\n`;
 
-  for (const factsItem of facts) {
-    text += `## ${factsItem.emoji} ${factsItem.categoryLabel}\n\n`;
-    text += `### ${factsItem.title}\n\n`;
-    text += `> ${factsItem.fact}\n\n`;
-    text += `${factsItem.detail}\n\n`;
+  for (const fact of facts) {
+    text += `## ${fact.emoji} ${fact.categoryLabel}\n\n`;
+    text += `### ${fact.title}\n\n`;
+    text += `> ${fact.fact}\n\n`;
+    text += `${fact.explanation}\n\n`;
+    text += `💡 Real-world case: ${fact.example}\n\n`;
     text += `---\n\n`;
+  }
+
+  if (glossary && glossary.length > 0) {
+    text += `## 📖 Glossary\n\n`;
+    text += `New words learned today:\n`;
+    for (const item of glossary) {
+      text += `- **${item.term}**: ${item.definition}\n`;
+    }
+    text += `\n`;
   }
 
   text += `Generated by InToday · Powered by OrcaRouter & Resend\n`;
