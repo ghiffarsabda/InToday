@@ -1,40 +1,31 @@
 import { NewsletterData } from '../types';
 
 /**
- * Renders the newsletter as a clean, GitHub-flavored Markdown styled HTML email.
+ * Renders the newsletter as a pure, minimal, GitHub README markdown-style HTML email.
  */
 export function renderNewsletterHtml(data: NewsletterData): string {
   const { formattedDate, facts } = data;
 
-  const factsHtml = facts.map((fact, index) => {
-    const isLast = index === facts.length - 1;
+  const sectionsHtml = facts.map((fact) => {
     return `
-      <!-- Fact Section: ${fact.categoryLabel} -->
-      <div style="margin-bottom: ${isLast ? '0' : '28px'};">
-        <div style="display: flex; align-items: center; margin-bottom: 8px;">
-          <span style="display: inline-block; font-size: 11px; font-weight: 600; font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 12px; background-color: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; margin-right: 8px;">
-            ${fact.emoji} ${fact.categoryLabel}
-          </span>
-        </div>
+      <!-- ${fact.categoryLabel} Section -->
+      <h2 style="font-size: 20px; font-weight: 600; line-height: 1.3; color: #1f2328; padding-bottom: 7px; border-bottom: 1px solid #d0d7de; margin: 32px 0 16px 0;">
+        ${fact.emoji} ${fact.categoryLabel}
+      </h2>
 
-        <h3 style="margin: 0 0 10px 0; font-size: 17px; font-weight: 600; line-height: 1.35; color: #1f2328;">
-          ${fact.title}
-        </h3>
+      <h3 style="font-size: 16px; font-weight: 600; line-height: 1.4; color: #1f2328; margin: 16px 0 10px 0;">
+        ${fact.title}
+      </h3>
 
-        <!-- Core Fact Blockquote (GitHub Markdown Style) -->
-        <div style="margin: 0 0 10px 0; padding: 10px 14px; background-color: #f6f8fa; border-left: 3.5px solid #0969da; border-radius: 0 6px 6px 0;">
-          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #24292f; font-weight: 500;">
-            ${fact.fact}
-          </p>
-        </div>
-
-        <!-- Detail / Context Paragraph -->
-        <p style="margin: 0; font-size: 13.5px; line-height: 1.65; color: #57606a;">
-          ${fact.detail}
+      <blockquote style="margin: 0 0 12px 0; padding: 0 1em; color: #24292f; border-left: 0.25em solid #d0d7de; font-size: 15px; line-height: 1.6;">
+        <p style="margin: 0; font-weight: 500;">
+          ${fact.fact}
         </p>
+      </blockquote>
 
-        ${!isLast ? '<hr style="border: 0; height: 1px; background-color: #d0d7de; margin: 24px 0 0 0;" />' : ''}
-      </div>
+      <p style="margin: 0 0 16px 0; font-size: 14.5px; line-height: 1.65; color: #1f2328;">
+        ${fact.detail}
+      </p>
     `;
   }).join('');
 
@@ -44,74 +35,37 @@ export function renderNewsletterHtml(data: NewsletterData): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>InToday · ${formattedDate}</title>
-  <!--[if mso]>
-  <style type="text/css">
-    body, table, td, p, h1, h2, h3, span { font-family: Arial, sans-serif !important; }
-  </style>
-  <![endif]-->
 </head>
-<body style="margin: 0; padding: 0; background-color: #f6f8fa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji'; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; color: #1f2328;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f6f8fa; padding: 32px 16px;">
-    <tr>
-      <td align="center">
-        <!-- Main Card Container -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; background-color: #ffffff; border: 1px solid #d0d7de; border-radius: 8px; box-shadow: 0 1px 3px rgba(31, 35, 40, 0.04); overflow: hidden;">
-          
-          <!-- Header Banner -->
-          <tr>
-            <td style="padding: 24px 28px 20px 28px; border-bottom: 1px solid #d0d7de; background-color: #ffffff;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td>
-                    <div style="font-size: 12px; font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #0969da; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 4px;">
-                      ✦ DAILY INTELLECTUAL BRIEF
-                    </div>
-                    <h1 style="margin: 0; font-size: 22px; font-weight: 700; color: #1f2328; letter-spacing: -0.3px;">
-                      InToday
-                    </h1>
-                  </td>
-                  <td align="right" style="vertical-align: bottom;">
-                    <span style="display: inline-block; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #57606a; background-color: #f6f8fa; border: 1px solid #d0d7de; padding: 3px 8px; border-radius: 6px;">
-                      ${formattedDate}
-                    </span>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
+<body style="margin: 0; padding: 24px 16px; background-color: #ffffff; color: #1f2328; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji'; font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased;">
+  
+  <div style="max-width: 640px; margin: 0 auto; background-color: #ffffff;">
+    
+    <!-- Title / H1 -->
+    <h1 style="font-size: 26px; font-weight: 600; line-height: 1.25; color: #1f2328; margin: 0 0 12px 0; padding-bottom: 10px; border-bottom: 1px solid #d0d7de;">
+      InToday &middot; ${formattedDate}
+    </h1>
 
-          <!-- Intro Subtitle -->
-          <tr>
-            <td style="padding: 16px 28px; background-color: #fbfcfe; border-bottom: 1px solid #eaeef2;">
-              <p style="margin: 0; font-size: 13px; color: #57606a; line-height: 1.5;">
-                Curated micro-insights across everyday reality, economic systems, jurisprudence, and human psychology.
-              </p>
-            </td>
-          </tr>
+    <blockquote style="margin: 0 0 24px 0; padding: 0 1em; color: #57606a; border-left: 0.25em solid #d0d7de; font-size: 14px; line-height: 1.5;">
+      <p style="margin: 0;">
+        Daily curated micro-insights across everyday reality, economics, law, and psychology.
+      </p>
+    </blockquote>
 
-          <!-- Content Body -->
-          <tr>
-            <td style="padding: 28px 28px;">
-              ${factsHtml}
-            </td>
-          </tr>
+    <!-- Content Sections -->
+    ${sectionsHtml}
 
-          <!-- Footer -->
-          <tr>
-            <td style="padding: 20px 28px; background-color: #f6f8fa; border-top: 1px solid #d0d7de; text-align: center;">
-              <p style="margin: 0 0 6px 0; font-size: 12px; color: #57606a; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">
-                Generated by InToday Worker · Powered by OrcaRouter & Resend
-              </p>
-              <p style="margin: 0; font-size: 11px; color: #8c959f;">
-                Private automated edition · Sent to your personal subscriber list
-              </p>
-            </td>
-          </tr>
+    <!-- Footer HR and Signature -->
+    <hr style="height: 1px; padding: 0; margin: 36px 0 16px 0; background-color: #d0d7de; border: 0;" />
+    
+    <p style="margin: 0 0 6px 0; font-size: 12px; color: #656d76; font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;">
+      Generated by <code>InToday</code> &middot; Powered by OrcaRouter &amp; Resend
+    </p>
+    <p style="margin: 0; font-size: 11px; color: #8c959f; font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;">
+      Private edition &middot; Sent to subscriber list
+    </p>
 
-        </table>
-      </td>
-    </tr>
-  </table>
+  </div>
+
 </body>
 </html>`;
 }
@@ -122,19 +76,17 @@ export function renderNewsletterHtml(data: NewsletterData): string {
 export function renderNewsletterText(data: NewsletterData): string {
   const { formattedDate, facts } = data;
 
-  let text = `===============================\n`;
-  text += ` INTODAY · DAILY BRIEF\n`;
-  text += ` ${formattedDate}\n`;
-  text += `===============================\n\n`;
+  let text = `# InToday · ${formattedDate}\n\n`;
+  text += `> Daily curated micro-insights across everyday reality, economics, law, and psychology.\n\n`;
 
   for (const fact of facts) {
-    text += `[${fact.emoji} ${fact.categoryLabel.toUpperCase()}]\n`;
-    text += `${fact.title}\n`;
+    text += `## ${fact.emoji} ${fact.categoryLabel}\n\n`;
+    text += `### ${fact.title}\n\n`;
     text += `> ${fact.fact}\n\n`;
-    text += `${fact.detail}\n`;
-    text += `---------------------------------\n\n`;
+    text += `${fact.detail}\n\n`;
+    text += `---\n\n`;
   }
 
-  text += `Generated by InToday Worker · Powered by OrcaRouter & Resend\n`;
+  text += `Generated by InToday · Powered by OrcaRouter & Resend\n`;
   return text;
 }
