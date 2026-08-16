@@ -265,7 +265,7 @@ export default {
         </li>
         <li>
           <span class="label">AI Model</span>
-          <span class="val">${env.ORCAROUTER_MODEL || 'deepseek/deepseek-v4-flash-free'}</span>
+          <span class="val">${env.GEMINI_MODEL || 'gemini-3.1-flash-lite'} (Google Gemini)</span>
         </li>
         <li>
           <span class="label">Subscribers</span>
