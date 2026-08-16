@@ -46,7 +46,8 @@ export async function sendDailyNewsletter(
   const subject = `InToday · Daily Briefing (${formattedDate})`;
 
   try {
-    const response = await resend.emails.send({
+    // 1. Try single batch delivery
+    const batchResponse = await resend.emails.send({
       from: fromEmail,
       to: recipients,
       subject: subject,
@@ -54,23 +55,66 @@ export async function sendDailyNewsletter(
       text: text
     });
 
-    if (response.error) {
+    if (!batchResponse.error) {
       return {
-        success: false,
+        success: true,
         recipientsCount: recipients.length,
-        error: response.error.message
+        data: batchResponse.data
+      };
+    }
+
+    console.warn('[Resend Batch] Batch dispatch rejected:', batchResponse.error.message);
+    console.log('[Resend Fallback] Attempting resilient individual delivery for verified recipients...');
+
+    // 2. Resilient fallback: deliver to verified recipients individually
+    const successfulSends: string[] = [];
+    const failedSends: Array<{ email: string; reason: string }> = [];
+
+    for (const email of recipients) {
+      try {
+        const indRes = await resend.emails.send({
+          from: fromEmail,
+          to: [email],
+          subject: subject,
+          html: html,
+          text: text
+        });
+
+        if (!indRes.error) {
+          successfulSends.push(email);
+          console.log(`[Resend] ✓ Delivered successfully to: ${email}`);
+        } else {
+          failedSends.push({ email, reason: indRes.error.message });
+          console.warn(`[Resend] ✗ Could not deliver to ${email}:`, indRes.error.message);
+        }
+      } catch (e: any) {
+        failedSends.push({ email, reason: e?.message || String(e) });
+      }
+    }
+
+    if (successfulSends.length > 0) {
+      return {
+        success: true,
+        recipientsCount: successfulSends.length,
+        data: {
+          deliveredTo: successfulSends,
+          failedDeliveries: failedSends,
+          notice: failedSends.length > 0
+            ? 'Resend sandbox mode delivered to account owner. To send to third-party emails, verify your domain at resend.com/domains and set FROM_EMAIL.'
+            : undefined
+        }
       };
     }
 
     return {
-      success: true,
-      recipientsCount: recipients.length,
-      data: response.data
+      success: false,
+      recipientsCount: 0,
+      error: batchResponse.error.message
     };
   } catch (err) {
     return {
       success: false,
-      recipientsCount: recipients.length,
+      recipientsCount: 0,
       error: err instanceof Error ? err.message : String(err)
     };
   }
