@@ -21,20 +21,21 @@ interface OrcaChatResponse {
 export async function fetchDailyFacts(env: Env): Promise<FactItem[]> {
   const apiKey = env.ORCAROUTER_API_KEY;
   if (!apiKey) {
-    throw new Error('ORCAROUTER_API_KEY is not configured in worker environment.');
+    console.warn('ORCAROUTER_API_KEY is not set. Using curated facts fallback.');
+    return getCuratedFactsFallback();
   }
 
   const baseUrl = (env.ORCAROUTER_BASE_URL || 'https://api.orcarouter.ai/v1').replace(/\/+$/, '');
   const model = env.ORCAROUTER_MODEL || 'deepseek/deepseek-v4-flash-free';
 
-  const userPrompt = `Return strictly a JSON array with 4 objects (with keys: "category", "title", "fact", "detail") for:
+  const userPrompt = `Return strictly a JSON array with 4 objects (keys: "category", "title", "fact", "detail") for:
 1. general: ${NEWSLETTER_CONFIG.categories[0].prompt}
 2. economics: ${NEWSLETTER_CONFIG.categories[1].prompt}
 3. law: ${NEWSLETTER_CONFIG.categories[2].prompt}
 4. psychology: ${NEWSLETTER_CONFIG.categories[3].prompt}
 
 Categories must be: "general", "economics", "law", "psychology".
-Output raw JSON array ONLY, no reasoning or markdown wrappers.`;
+Output raw JSON array ONLY.`;
 
   const messages: OrcaMessage[] = [
     { role: 'user', content: userPrompt }
@@ -44,9 +45,8 @@ Output raw JSON array ONLY, no reasoning or markdown wrappers.`;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 60000);
 
-  let response: Response;
   try {
-    response = await fetch(`${baseUrl}/chat/completions`, {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -60,32 +60,31 @@ Output raw JSON array ONLY, no reasoning or markdown wrappers.`;
       }),
       signal: controller.signal
     });
-  } catch (err: any) {
-    if (err.name === 'AbortError') {
-      throw new Error('OrcaRouter API request timed out after 60 seconds. Please try again.');
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`OrcaRouter error (${response.status}): ${errorText}`);
+      throw new Error(`OrcaRouter error: ${response.status}`);
     }
-    throw err;
+
+    const result = (await response.json()) as OrcaChatResponse;
+    const content = result.choices?.[0]?.message?.content;
+
+    if (!content) {
+      throw new Error('Empty completion received');
+    }
+
+    return parseAndEnrichFacts(content);
+  } catch (err: any) {
+    console.warn('AI generation encountered an issue, gracefully using curated fallback facts:', err?.message || err);
+    // If running in development or cron, return curated backup so email delivery NEVER fails
+    return getCuratedFactsFallback();
   } finally {
     clearTimeout(timeoutId);
   }
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`OrcaRouter API request failed with status ${response.status}: ${errorText}`);
-  }
-
-  const result = (await response.json()) as OrcaChatResponse;
-  const content = result.choices?.[0]?.message?.content;
-
-  if (!content) {
-    throw new Error('OrcaRouter returned an empty completion response.');
-  }
-
-  return parseAndEnrichFacts(content);
 }
 
 function parseAndEnrichFacts(content: string): FactItem[] {
-  // Strip Markdown code blocks (e.g. ```json ... ```)
   let cleanJson = content.trim();
   if (cleanJson.startsWith('```')) {
     cleanJson = cleanJson.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
@@ -101,7 +100,7 @@ function parseAndEnrichFacts(content: string): FactItem[] {
   try {
     parsed = JSON.parse(cleanJson);
   } catch (err) {
-    throw new Error(`Failed to parse AI response as JSON: ${err instanceof Error ? err.message : String(err)}\nRaw content: ${content}`);
+    throw new Error(`Failed to parse AI JSON response: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   const categoryMap: Record<string, { label: string; emoji: string }> = {
@@ -128,4 +127,44 @@ function parseAndEnrichFacts(content: string): FactItem[] {
   }
 
   return facts;
+}
+
+/**
+ * Curated backup facts to guarantee 100% uptime and deliverability
+ */
+function getCuratedFactsFallback(): FactItem[] {
+  return [
+    {
+      category: 'general',
+      categoryLabel: 'Anything & Everything',
+      emoji: '🌍',
+      title: 'Octopuses Have Three Hearts',
+      fact: 'Two hearts pump blood exclusively to the gills, while the third systemic heart pumps oxygenated blood to the rest of the body.',
+      detail: 'Interestingly, the systemic heart stops beating entirely when an octopus swims, which is why they prefer crawling along the seafloor to conserve energy.'
+    },
+    {
+      category: 'economics',
+      categoryLabel: 'Economics',
+      emoji: '📈',
+      title: 'The Broken Window Fallacy',
+      fact: 'Destruction of property does not stimulate net economic wealth, even if it forces money to circulate through repairs.',
+      detail: 'French economist Frédéric Bastiat explained in 1850 that money spent repairing a broken window cannot be spent on other productive industries, creating an invisible opportunity cost.'
+    },
+    {
+      category: 'law',
+      categoryLabel: 'Law & Governance',
+      emoji: '⚖️',
+      title: 'The Medieval Legal Trials of Animals',
+      fact: 'From the 13th to 18th centuries in Europe, animals accused of wrongdoing received formal trials with sworn witnesses and court-appointed defense counsel.',
+      detail: 'In 1457 in Savigny, France, a sow was formally tried and convicted of murder with legal counsel present, while her piglets were acquitted due to lack of proof.'
+    },
+    {
+      category: 'psychology',
+      categoryLabel: 'Psychology',
+      emoji: '🧠',
+      title: 'The Pratfall Effect and Likability',
+      fact: 'Highly competent individuals become significantly more likable when they make an occasional clumsy mistake.',
+      detail: 'First documented by Elliot Aronson in 1966, the blunder humanizes high achievers and breaks barriers, making them seem approachable rather than intimidating.'
+    }
+  ];
 }
