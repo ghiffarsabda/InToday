@@ -1,9 +1,14 @@
 import { Env } from './types';
-import { RECIPIENT_EMAILS } from './config';
 import { fetchDailyContent, GeneratedContent } from './services/facts';
 import { sendDailyNewsletter } from './services/email';
 import { renderNewsletterHtml } from './templates/newsletter';
-import { getRecentTopics, HistoryRecord } from './services/db';
+import {
+  getRecentTopics,
+  getSubscribers,
+  getSubscriberRecords,
+  addSubscriber,
+  removeSubscriber
+} from './services/db';
 
 // In-memory cache for today's generated content
 let cachedContent: { dateKey: string; content: GeneratedContent } | null = null;
@@ -27,8 +32,10 @@ export default {
           const todayKey = new Date().toISOString().split('T')[0];
           cachedContent = { dateKey: todayKey, content };
 
-          console.log(`[InToday Cron] Dispatching email to ${RECIPIENT_EMAILS.length} recipients...`);
-          const result = await sendDailyNewsletter(env, content, RECIPIENT_EMAILS);
+          // Fetch dynamic subscriber list from D1 database
+          const subscribers = await getSubscribers(env.DB);
+          console.log(`[InToday Cron] Dispatching email to ${subscribers.length} subscribers...`);
+          const result = await sendDailyNewsletter(env, content, subscribers);
 
           if (result.success) {
             console.log('[InToday Cron] Email sent successfully:', JSON.stringify(result.data));
@@ -44,14 +51,14 @@ export default {
 
   /**
    * HTTP Fetch Handler
-   * Provides a web dashboard, fast HTML email preview, topic history viewer, and manual dispatch endpoints.
+   * Provides a web dashboard, live preview, subscriber manager, and history viewer.
    */
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
     const todayKey = new Date().toISOString().split('T')[0];
 
-    // 1. Email HTML Preview (Always forces fresh live AI generation)
+    // 1. Email HTML Preview (Forces fresh live AI generation)
     if (path === '/preview') {
       try {
         const content = await fetchDailyContent(env);
@@ -76,24 +83,27 @@ export default {
 
         // Sticky top toolbar for preview controls
         const toolbar = `
-        <div style="background: #161b22; color: #c9d1d9; padding: 12px 18px; border-bottom: 1px solid #30363d; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+        <div style="background: #161b22; color: #c9d1d9; padding: 12px 18px; border-bottom: 1px solid #30363d; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,0.2); flex-wrap: wrap; gap: 8px;">
           <div style="display: flex; align-items: center; gap: 10px;">
             <strong style="color: #f0f6fc; font-size: 13.5px;">InToday Newsletter Preview</strong>
             <span style="background: rgba(63, 185, 80, 0.2); color: #3fb950; padding: 3px 9px; border-radius: 12px; font-size: 11.5px; font-weight: 600;">
               ⚡ Live Generated (${content.facts.length} items)
             </span>
           </div>
-          <div style="display: flex; gap: 10px; align-items: center;">
-            <a href="/preview?t=${randomToken}" style="background: #238636; color: #ffffff; text-decoration: none; padding: 6px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.3);">
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <a href="/preview?t=${randomToken}" style="background: #238636; color: #ffffff; text-decoration: none; padding: 6px 13px; border-radius: 6px; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.3);">
               🔄 Generate New Facts
             </a>
-            <button id="preview-send-btn" onclick="sendNewsletterFromPreview()" style="background: #1f6feb; color: #ffffff; border: none; cursor: pointer; padding: 6px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+            <button id="preview-send-btn" onclick="sendNewsletterFromPreview()" style="background: #1f6feb; color: #ffffff; border: none; cursor: pointer; padding: 6px 13px; border-radius: 6px; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
               🚀 Send Newsletter Now
             </button>
-            <a href="/history" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">
+            <a href="/subscribers" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 6px 11px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">
+              👥 Subscribers
+            </a>
+            <a href="/history" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 6px 11px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">
               🗄️ Topic History
             </a>
-            <a href="/" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">
+            <a href="/" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 6px 11px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">
               ← Dashboard
             </a>
           </div>
@@ -107,7 +117,7 @@ export default {
               const res = await fetch('/send', { method: 'POST' });
               const data = await res.json();
               if (data.success) {
-                alert('✓ Newsletter sent successfully to subscribers!');
+                alert('✓ Newsletter sent successfully to all subscribers (' + data.recipientsCount + ' recipients)!');
               } else {
                 alert('✗ Failed to send: ' + (data.error || JSON.stringify(data)));
               }
@@ -271,11 +281,12 @@ export default {
       <div>
         <h1>🗄️ Cloudflare D1 Topic Memory History</h1>
         <div style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">
-          All topics stored in SQLite. These topics are automatically excluded on future generations to prevent repetition.
+          All topics stored in SQLite. These topic titles are automatically excluded on future generations to prevent repetition.
         </div>
       </div>
-      <div style="display: flex; gap: 10px; align-items: center;">
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
         <span class="badge">${records.length} Recorded Topics</span>
+        <a href="/subscribers" class="btn">👥 Subscribers</a>
         <a href="/preview" class="btn btn-primary">✨ Open Preview</a>
         <a href="/" class="btn">← Dashboard</a>
       </div>
@@ -314,7 +325,325 @@ export default {
       }
     }
 
-    // 3. Fetch Facts JSON API (Always live)
+    // 3. Subscriber Management Page (GET /subscribers)
+    if (path === '/subscribers') {
+      try {
+        const subscribers = await getSubscriberRecords(env.DB);
+
+        const rowsHtml = subscribers.length > 0 ? subscribers.map(s => `
+          <tr style="border-bottom: 1px solid #30363d;" id="sub-row-${s.id}">
+            <td style="padding: 12px 16px; font-size: 13.5px; font-weight: 500; color: #f0f6fc; font-family: monospace;">
+              ${s.email}
+            </td>
+            <td style="padding: 12px 16px; font-size: 12.5px; color: #8b949e;">
+              ${s.created_at ? new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Active'}
+            </td>
+            <td style="padding: 12px 16px; text-align: right;">
+              <button onclick="deleteEmail('${s.email}', ${s.id})" style="background: rgba(248, 81, 73, 0.15); color: #f85149; border: 1px solid rgba(248, 81, 73, 0.4); padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">
+                ✕ Remove
+              </button>
+            </td>
+          </tr>
+        `).join('') : `
+          <tr>
+            <td colspan="3" style="padding: 24px; text-align: center; color: #8b949e;">
+              No subscribers in database yet. Add one below!
+            </td>
+          </tr>
+        `;
+
+        const subscribersHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InToday · Mailing List Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --text-bright: #f0f6fc;
+      --text-muted: #8b949e;
+      --accent: #238636;
+      --accent-hover: #2ea043;
+      --link: #58a6ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px 16px;
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .container { max-width: 720px; margin: 0 auto; }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text-bright);
+      margin: 0;
+    }
+    .btn {
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #21262d;
+      color: var(--text-bright);
+      border: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #ffffff;
+      border-color: transparent;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .add-form {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 24px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .input-field {
+      flex: 1;
+      min-width: 240px;
+      padding: 9px 14px;
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-bright);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+    }
+    .input-field:focus { border-color: var(--link); }
+    .table-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+    th {
+      background: #21262d;
+      padding: 12px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+    }
+    #msg-box {
+      margin-bottom: 16px;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div>
+        <h1>👥 Mailing List Subscribers</h1>
+        <div style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">
+          Subscribers stored in Cloudflare D1 database. The newsletter dispatches to this list daily.
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <a href="/preview" class="btn btn-primary">✨ Open Preview</a>
+        <a href="/" class="btn">← Dashboard</a>
+      </div>
+    </div>
+
+    <div id="msg-box"></div>
+
+    <form class="add-form" onsubmit="addEmail(event)">
+      <input type="email" id="email-input" class="input-field" placeholder="Enter new subscriber email (e.g. friend@gmail.com)" required />
+      <button type="submit" id="add-btn" class="btn btn-primary">➕ Add to Mailing List</button>
+    </form>
+
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Subscriber Email</th>
+            <th>Joined</th>
+            <th style="text-align: right;">Action</th>
+          </tr>
+        </thead>
+        <tbody id="subscriber-tbody">
+          ${rowsHtml}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    function showMsg(text, isError = false) {
+      const box = document.getElementById('msg-box');
+      box.style.display = 'block';
+      box.style.background = isError ? 'rgba(248, 81, 73, 0.15)' : 'rgba(46, 160, 67, 0.15)';
+      box.style.color = isError ? '#f85149' : '#3fb950';
+      box.style.border = isError ? '1px solid rgba(248, 81, 73, 0.3)' : '1px solid rgba(46, 160, 67, 0.3)';
+      box.textContent = text;
+      setTimeout(() => { box.style.display = 'none'; }, 4000);
+    }
+
+    async function addEmail(e) {
+      e.preventDefault();
+      const input = document.getElementById('email-input');
+      const btn = document.getElementById('add-btn');
+      const email = input.value.trim();
+      if (!email) return;
+
+      btn.disabled = true;
+      btn.textContent = '⏳ Adding...';
+
+      try {
+        const res = await fetch('/api/subscribers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showMsg(data.message);
+          input.value = '';
+          setTimeout(() => location.reload(), 800);
+        } else {
+          showMsg(data.message || data.error, true);
+        }
+      } catch (err) {
+        showMsg('Error: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '➕ Add to Mailing List';
+      }
+    }
+
+    async function deleteEmail(email, rowId) {
+      if (!confirm('Remove ' + email + ' from your mailing list?')) return;
+
+      try {
+        const res = await fetch('/api/subscribers', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showMsg(data.message);
+          const row = document.getElementById('sub-row-' + rowId);
+          if (row) row.remove();
+        } else {
+          showMsg(data.message || data.error, true);
+        }
+      } catch (err) {
+        showMsg('Error: ' + err.message, true);
+      }
+    }
+  </script>
+</body>
+</html>`;
+
+        return new Response(subscribersHtml, {
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-cache, no-store, must-revalidate'
+          }
+        });
+      } catch (err) {
+        return new Response(
+          `Error retrieving subscribers: ${err instanceof Error ? err.message : String(err)}`,
+          { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+        );
+      }
+    }
+
+    // 4. Subscriber JSON APIs (GET, POST, DELETE /api/subscribers)
+    if (path === '/api/subscribers') {
+      if (request.method === 'GET') {
+        const subscribers = await getSubscribers(env.DB);
+        return new Response(JSON.stringify({ success: true, count: subscribers.length, subscribers }, null, 2), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (request.method === 'POST') {
+        try {
+          const body: any = await request.json();
+          const email = body?.email;
+          if (!email) {
+            return new Response(JSON.stringify({ success: false, message: 'Email is required.' }), {
+              status: 400, headers: { 'Content-Type': 'application/json' }
+            });
+          }
+          const result = await addSubscriber(env.DB, email);
+          return new Response(JSON.stringify(result, null, 2), {
+            status: result.success ? 200 : 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } catch (err) {
+          return new Response(JSON.stringify({ success: false, message: err instanceof Error ? err.message : String(err) }), {
+            status: 500, headers: { 'Content-Type': 'application/json' }
+          });
+        }
+      }
+
+      if (request.method === 'DELETE') {
+        try {
+          const body: any = await request.json();
+          const email = body?.email;
+          if (!email) {
+            return new Response(JSON.stringify({ success: false, message: 'Email is required.' }), {
+              status: 400, headers: { 'Content-Type': 'application/json' }
+            });
+          }
+          const result = await removeSubscriber(env.DB, email);
+          return new Response(JSON.stringify(result, null, 2), {
+            status: result.success ? 200 : 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } catch (err) {
+          return new Response(JSON.stringify({ success: false, message: err instanceof Error ? err.message : String(err) }), {
+            status: 500, headers: { 'Content-Type': 'application/json' }
+          });
+        }
+      }
+    }
+
+    // 5. Fetch Facts JSON API (Always live)
     if (path === '/api/facts' || path === '/api/content') {
       try {
         const content = await fetchDailyContent(env);
@@ -334,7 +663,7 @@ export default {
       }
     }
 
-    // 4. History JSON API (GET /api/history)
+    // 6. History JSON API (GET /api/history)
     if (path === '/api/history') {
       try {
         const records = await getRecentTopics(env.DB, 200);
@@ -352,15 +681,16 @@ export default {
       }
     }
 
-    // 5. Manual Email Trigger (POST /send)
+    // 7. Manual Email Trigger (POST /send)
     if (path === '/send' && request.method === 'POST') {
       try {
         console.log('[InToday Manual Trigger] Fetching live content...');
         const content = await fetchDailyContent(env);
         cachedContent = { dateKey: todayKey, content };
 
-        console.log(`[InToday Manual Trigger] Sending to ${RECIPIENT_EMAILS.length} recipients...`);
-        const result = await sendDailyNewsletter(env, content, RECIPIENT_EMAILS);
+        const subscribers = await getSubscribers(env.DB);
+        console.log(`[InToday Manual Trigger] Sending to ${subscribers.length} recipients...`);
+        const result = await sendDailyNewsletter(env, content, subscribers);
 
         return new Response(JSON.stringify(result, null, 2), {
           headers: { 'Content-Type': 'application/json' }
@@ -373,9 +703,10 @@ export default {
       }
     }
 
-    // 6. Management Dashboard (GET /)
+    // 8. Management Dashboard (GET /)
     if (path === '/' || path === '') {
       const historyRecords = await getRecentTopics(env.DB, 5);
+      const subscribers = await getSubscribers(env.DB);
 
       const dashboardHtml = `<!DOCTYPE html>
 <html lang="en">
@@ -499,14 +830,17 @@ export default {
           <span class="val">${historyRecords.length > 0 ? 'Active (Cloudflare D1 SQLite)' : 'Initializing...'}</span>
         </li>
         <li>
-          <span class="label">Subscribers</span>
-          <span class="val">${RECIPIENT_EMAILS.join(', ')}</span>
+          <span class="label">Active Subscribers</span>
+          <span class="val">${subscribers.length} recipient(s): ${subscribers.join(', ')}</span>
         </li>
       </ul>
 
       <div class="btn-group">
         <a href="/preview" class="btn btn-primary">
           ✨ Open Live Preview
+        </a>
+        <a href="/subscribers" class="btn btn-secondary">
+          👥 Manage Mailing List
         </a>
         <a href="/history" class="btn btn-secondary">
           🗄️ View Topic History
@@ -537,7 +871,7 @@ export default {
         if (data.success) {
           box.style.background = 'rgba(46, 160, 67, 0.15)';
           box.style.color = '#3fb950';
-          box.textContent = '✓ Successfully dispatched to all subscribers!\n' + JSON.stringify(data, null, 2);
+          box.textContent = '✓ Successfully dispatched to all ' + data.recipientsCount + ' subscribers!\n' + JSON.stringify(data, null, 2);
         } else {
           box.style.background = 'rgba(248, 81, 73, 0.15)';
           box.style.color = '#f85149';
