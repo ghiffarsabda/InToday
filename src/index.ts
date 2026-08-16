@@ -4,7 +4,7 @@ import { fetchDailyContent, getCuratedContentFallback, GeneratedContent } from '
 import { sendDailyNewsletter } from './services/email';
 import { renderNewsletterHtml } from './templates/newsletter';
 
-// In-memory cache for today's generated content to make subsequent requests instant
+// In-memory cache for today's generated content
 let cachedContent: { dateKey: string; content: GeneratedContent } | null = null;
 
 export default {
@@ -50,23 +50,20 @@ export default {
     const path = url.pathname;
     const todayKey = new Date().toISOString().split('T')[0];
 
-    // 1. Email HTML Preview (Instant by default, live AI generation with ?live=true)
+    // 1. Email HTML Preview (Generates live content dynamically)
     if (path === '/preview') {
       try {
-        const isLiveRequested = url.searchParams.get('live') === 'true';
+        const isSample = url.searchParams.get('sample') === 'true';
         let content: GeneratedContent;
-        let isLiveGenerated = false;
+        let isLiveGenerated = true;
 
-        if (isLiveRequested) {
+        if (isSample) {
+          content = getCuratedContentFallback();
+          isLiveGenerated = false;
+        } else {
+          // Always generate a fresh batch of live facts by default!
           content = await fetchDailyContent(env);
           cachedContent = { dateKey: todayKey, content };
-          isLiveGenerated = true;
-        } else if (cachedContent && cachedContent.dateKey === todayKey) {
-          content = cachedContent.content;
-          isLiveGenerated = true;
-        } else {
-          // Instant default preview with zero wait time
-          content = getCuratedContentFallback();
         }
 
         const date = new Date();
@@ -84,18 +81,23 @@ export default {
           glossary: content.glossary
         });
 
-        // Minimal sticky top banner for preview controls
+        const randomToken = Math.random().toString(36).substring(7);
+
+        // Sticky top toolbar for preview controls
         const toolbar = `
-        <div style="background: #161b22; color: #c9d1d9; padding: 10px 16px; border-bottom: 1px solid #30363d; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <strong style="color: #f0f6fc;">InToday Email Preview:</strong>
-            <span style="background: ${isLiveGenerated ? 'rgba(63, 185, 80, 0.2)' : 'rgba(210, 153, 34, 0.2)'}; color: ${isLiveGenerated ? '#3fb950' : '#d29922'}; padding: 2px 7px; border-radius: 12px; font-size: 11px; font-weight: 600;">
-              ${isLiveGenerated ? '● Live AI Generated' : '○ Instant Sample Mode'}
+        <div style="background: #161b22; color: #c9d1d9; padding: 12px 18px; border-bottom: 1px solid #30363d; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <strong style="color: #f0f6fc; font-size: 13.5px;">InToday Newsletter Preview</strong>
+            <span style="background: ${isLiveGenerated ? 'rgba(63, 185, 80, 0.2)' : 'rgba(210, 153, 34, 0.2)'}; color: ${isLiveGenerated ? '#3fb950' : '#d29922'}; padding: 3px 9px; border-radius: 12px; font-size: 11.5px; font-weight: 600;">
+              ${isLiveGenerated ? '⚡ Live AI Generated' : '○ Static Sample Mode'}
             </span>
           </div>
           <div style="display: flex; gap: 10px;">
-            ${!isLiveRequested ? '<a href="/preview?live=true" style="background: #238636; color: #ffffff; text-decoration: none; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;">⚡️ Generate Live with AI</a>' : '<a href="/preview" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 5px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">Switch to Instant Sample</a>'}
-            <a href="/" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 5px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">← Dashboard</a>
+            <a href="/preview?t=${randomToken}" style="background: #238636; color: #ffffff; text-decoration: none; padding: 6px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.3);">
+              🔄 Generate New Facts
+            </a>
+            ${isLiveGenerated ? '<a href="/preview?sample=true" style="background: #21262d; color: #8b949e; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">View Static Sample</a>' : ''}
+            <a href="/" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">← Dashboard</a>
           </div>
         </div>`;
 
@@ -103,7 +105,10 @@ export default {
         html = html.replace(/(<body[^>]*>)/i, `$1${toolbar}`);
 
         return new Response(html, {
-          headers: { 'Content-Type': 'text/html; charset=utf-8' }
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-cache, no-store, must-revalidate'
+          }
         });
       } catch (err) {
         return new Response(`Error generating preview: ${err instanceof Error ? err.message : String(err)}`, {
@@ -113,13 +118,23 @@ export default {
       }
     }
 
-    // 2. Fetch Facts & News JSON API
+    // 2. Fetch Facts JSON API
     if (path === '/api/facts' || path === '/api/content') {
       try {
-        const content = await fetchDailyContent(env);
-        cachedContent = { dateKey: todayKey, content };
+        const isFresh = url.searchParams.get('fresh') === 'true' || url.searchParams.get('live') === 'true';
+        let content: GeneratedContent;
+        if (isFresh || !cachedContent || cachedContent.dateKey !== todayKey) {
+          content = await fetchDailyContent(env);
+          cachedContent = { dateKey: todayKey, content };
+        } else {
+          content = cachedContent.content;
+        }
+
         return new Response(JSON.stringify({ success: true, content }, null, 2), {
-          headers: { 'Content-Type': 'application/json' }
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate'
+          }
         });
       } catch (err) {
         return new Response(
@@ -136,45 +151,42 @@ export default {
         const content = await fetchDailyContent(env);
         cachedContent = { dateKey: todayKey, content };
 
-        console.log('[InToday Manual Trigger] Sending email...');
+        console.log(`[InToday Manual Trigger] Sending to ${RECIPIENT_EMAILS.length} recipients...`);
         const result = await sendDailyNewsletter(env, content, RECIPIENT_EMAILS);
 
         return new Response(JSON.stringify(result, null, 2), {
-          status: result.success ? 200 : 500,
           headers: { 'Content-Type': 'application/json' }
         });
       } catch (err) {
         return new Response(
-          JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }, null, 2),
+          JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }),
           { status: 500, headers: { 'Content-Type': 'application/json' } }
         );
       }
     }
 
-    // 4. Admin / Management Dashboard UI
-    const hasOrcaKey = Boolean(env.ORCAROUTER_API_KEY && env.ORCAROUTER_API_KEY.length > 5);
-    const hasResendKey = Boolean(env.RESEND_API_KEY && env.RESEND_API_KEY.length > 5);
-
-    const dashboardHtml = `<!DOCTYPE html>
+    // 4. Management Dashboard (GET /)
+    if (path === '/' || path === '') {
+      const dashboardHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>InToday · Newsletter Worker</title>
+  <title>InToday · Management Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #0d1117;
       --card-bg: #161b22;
       --border: #30363d;
       --text: #c9d1d9;
-      --heading: #f0f6fc;
-      --accent: #2f81f7;
-      --accent-hover: #58a6ff;
-      --success: #3fb950;
-      --warning: #d29922;
-      --danger: #f85149;
-      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      --text-bright: #f0f6fc;
+      --text-muted: #8b949e;
+      --accent: #238636;
+      --accent-hover: #2ea043;
+      --link: #58a6ff;
     }
     * { box-sizing: border-box; }
     body {
@@ -182,235 +194,156 @@ export default {
       padding: 40px 20px;
       background-color: var(--bg);
       color: var(--text);
-      font-family: var(--font-sans);
-      display: flex;
-      justify-content: center;
-    }
-    .container {
-      width: 100%;
-      max-width: 680px;
-    }
-    .header {
-      margin-bottom: 28px;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 20px;
-    }
-    .badge {
-      display: inline-block;
-      font-family: var(--font-mono);
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--accent);
-      background: rgba(47, 129, 247, 0.15);
-      border: 1px solid rgba(47, 129, 247, 0.3);
-      padding: 3px 8px;
-      border-radius: 12px;
-      margin-bottom: 8px;
-      text-transform: uppercase;
-    }
-    h1 {
-      margin: 0 0 6px 0;
-      color: var(--heading);
-      font-size: 24px;
-      font-weight: 600;
-      letter-spacing: -0.5px;
-    }
-    p.subtitle {
-      margin: 0;
-      color: #8b949e;
-      font-size: 14px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       line-height: 1.5;
     }
+    .container { max-width: 680px; margin: 0 auto; }
     .card {
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 20px;
+      padding: 24px;
       margin-bottom: 20px;
     }
-    .card-title {
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text-bright);
+      margin: 0 0 8px 0;
+    }
+    .subtitle {
+      color: var(--text-muted);
       font-size: 14px;
-      font-weight: 600;
-      color: var(--heading);
-      margin-top: 0;
-      margin-bottom: 14px;
+      margin-bottom: 24px;
+    }
+    .btn-group {
       display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .status-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 0;
-      border-bottom: 1px solid #21262d;
-      font-size: 13px;
-    }
-    .status-row:last-child { border-bottom: none; }
-    .status-tag {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      padding: 2px 7px;
-      border-radius: 4px;
-      font-weight: 600;
-    }
-    .status-ok { background: rgba(63, 185, 80, 0.15); color: var(--success); border: 1px solid rgba(63, 185, 80, 0.3); }
-    .status-missing { background: rgba(248, 81, 73, 0.15); color: var(--danger); border: 1px solid rgba(248, 81, 73, 0.3); }
-    .recipients-list {
-      margin: 0;
-      padding-left: 20px;
-      font-family: var(--font-mono);
-      font-size: 13px;
-      color: #8b949e;
-    }
-    .recipients-list li { margin-bottom: 4px; }
-    .button-group {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
       gap: 12px;
-      margin-top: 24px;
+      margin-top: 20px;
+      flex-wrap: wrap;
     }
     .btn {
-      padding: 10px 14px;
-      font-size: 13px;
-      font-weight: 500;
+      padding: 10px 18px;
       border-radius: 6px;
-      cursor: pointer;
-      text-decoration: none;
-      text-align: center;
-      transition: all 0.15s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      border: 1px solid transparent;
-    }
-    .btn-primary {
-      background-color: var(--accent);
-      color: #ffffff;
-      border-color: rgba(240, 246, 252, 0.1);
-      grid-column: span 2;
-      padding: 12px;
       font-size: 14px;
       font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
     }
-    .btn-primary:hover { background-color: var(--accent-hover); }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
     .btn-secondary {
-      background-color: #21262d;
-      color: var(--heading);
+      background: #21262d;
+      color: var(--text-bright);
       border-color: var(--border);
     }
-    .btn-secondary:hover { background-color: #30363d; }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    #send-result {
-      margin-top: 14px;
-      font-family: var(--font-mono);
-      font-size: 12px;
+    .btn-secondary:hover { background: #30363d; }
+    .info-list {
+      list-style: none;
+      padding: 0;
+      margin: 16px 0;
+    }
+    .info-list li {
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      font-size: 13.5px;
+    }
+    .info-list li:last-child { border-bottom: none; }
+    .label { color: var(--text-muted); }
+    .val { color: var(--text-bright); font-family: monospace; }
+    #status-box {
+      margin-top: 16px;
       padding: 12px;
       border-radius: 6px;
+      font-family: monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
       display: none;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="header">
-      <div class="badge">Cloudflare Worker</div>
-      <h1>InToday Newsletter Engine</h1>
-      <p class="subtitle">Automated daily live news + intellectual brief via OrcaRouter &amp; Resend</p>
-    </div>
-
     <div class="card">
-      <div class="card-title">System Environment & Secrets</div>
-      <div class="status-row">
-        <span>Live Web News Fetch</span>
-        <span class="status-tag status-ok">Active ✓ (Global &amp; Indonesia)</span>
-      </div>
-      <div class="status-row">
-        <span>OrcaRouter API Key</span>
-        <span class="status-tag ${hasOrcaKey ? 'status-ok' : 'status-missing'}">${hasOrcaKey ? 'Configured ✓' : 'Missing'}</span>
-      </div>
-      <div class="status-row">
-        <span>Model</span>
-        <span style="font-family: var(--font-mono); font-size: 12px; color: #58a6ff;">${env.ORCAROUTER_MODEL || 'deepseek/deepseek-v4-flash-free'}</span>
-      </div>
-      <div class="status-row">
-        <span>Resend API Key</span>
-        <span class="status-tag ${hasResendKey ? 'status-ok' : 'status-missing'}">${hasResendKey ? 'Configured ✓' : 'Missing'}</span>
-      </div>
-      <div class="status-row">
-        <span>Sender Address</span>
-        <span style="font-family: var(--font-mono); font-size: 12px; color: #8b949e;">${env.FROM_EMAIL || 'onboarding@resend.dev'}</span>
-      </div>
-      <div class="status-row">
-        <span>Cron Trigger</span>
-        <span style="font-family: var(--font-mono); font-size: 12px; color: #8b949e;">0 8 * * * (Daily at 08:00 UTC)</span>
-      </div>
-    </div>
+      <h1>InToday Control Center</h1>
+      <div class="subtitle">AI-powered daily newsletter briefing</div>
 
-    <div class="card">
-      <div class="card-title">Subscribers (${RECIPIENT_EMAILS.length})</div>
-      <ul class="recipients-list">
-        ${RECIPIENT_EMAILS.map(e => `<li>${e}</li>`).join('')}
+      <ul class="info-list">
+        <li>
+          <span class="label">Schedule</span>
+          <span class="val">Daily at 08:00 WIB (01:00 UTC)</span>
+        </li>
+        <li>
+          <span class="label">AI Model</span>
+          <span class="val">${env.ORCAROUTER_MODEL || 'deepseek/deepseek-v4-flash-free'}</span>
+        </li>
+        <li>
+          <span class="label">Subscribers</span>
+          <span class="val">${RECIPIENT_EMAILS.join(', ')}</span>
+        </li>
       </ul>
-    </div>
 
-    <div class="button-group">
-      <a href="/preview" target="_blank" class="btn btn-secondary">
-        ⚡️ Instant Preview (0s)
-      </a>
-      <a href="/preview?live=true" target="_blank" class="btn btn-secondary">
-        🤖 Live AI &amp; Web News (5s)
-      </a>
-      <button id="send-btn" class="btn btn-primary" onclick="sendNow()">
-        🚀 Send Daily Newsletter to Subscribers
-      </button>
-    </div>
+      <div class="btn-group">
+        <a href="/preview" class="btn btn-primary">
+          ✨ Open Live Preview
+        </a>
+        <button id="send-btn" class="btn btn-secondary" onclick="sendNow()">
+          🚀 Send Newsletter Now
+        </button>
+      </div>
 
-    <pre id="send-result"></pre>
+      <div id="status-box"></div>
+    </div>
   </div>
 
   <script>
     async function sendNow() {
       const btn = document.getElementById('send-btn');
-      const resultBox = document.getElementById('send-result');
+      const box = document.getElementById('status-box');
       btn.disabled = true;
-      btn.textContent = 'Fetching Live News & Dispatching...';
-      resultBox.style.display = 'block';
-      resultBox.style.background = '#21262d';
-      resultBox.style.color = '#8b949e';
-      resultBox.textContent = 'Scraping live global & Indonesian headlines, summarizing with AI, and dispatching via Resend...';
+      btn.textContent = '⏳ Dispatching...';
+      box.style.display = 'block';
+      box.style.background = '#21262d';
+      box.style.color = '#c9d1d9';
+      box.textContent = 'Generating live content and dispatching via Resend...';
 
       try {
         const res = await fetch('/send', { method: 'POST' });
         const data = await res.json();
-        if (res.ok && data.success) {
-          resultBox.style.background = 'rgba(63, 185, 80, 0.15)';
-          resultBox.style.color = '#3fb950';
-          resultBox.style.border = '1px solid rgba(63, 185, 80, 0.3)';
-          resultBox.textContent = '✓ Successfully sent to subscribers!\\n' + JSON.stringify(data, null, 2);
+        if (data.success) {
+          box.style.background = 'rgba(46, 160, 67, 0.15)';
+          box.style.color = '#3fb950';
+          box.textContent = '✓ Successfully dispatched to all subscribers!\n' + JSON.stringify(data, null, 2);
         } else {
-          resultBox.style.background = 'rgba(248, 81, 73, 0.15)';
-          resultBox.style.color = '#f85149';
-          resultBox.style.border = '1px solid rgba(248, 81, 73, 0.3)';
-          resultBox.textContent = '✗ Failed:\\n' + (data.error || JSON.stringify(data, null, 2));
+          box.style.background = 'rgba(248, 81, 73, 0.15)';
+          box.style.color = '#f85149';
+          box.textContent = '✗ Error dispatching email:\n' + (data.error || JSON.stringify(data));
         }
       } catch (err) {
-        resultBox.style.background = 'rgba(248, 81, 73, 0.15)';
-        resultBox.style.color = '#f85149';
-        resultBox.style.border = '1px solid rgba(248, 81, 73, 0.3)';
-        resultBox.textContent = '✗ Request error: ' + err.message;
+        box.style.background = 'rgba(248, 81, 73, 0.15)';
+        box.style.color = '#f85149';
+        box.textContent = '✗ Failed: ' + err.message;
       } finally {
         btn.disabled = false;
-        btn.textContent = '🚀 Send Daily Newsletter to Subscribers';
+        btn.textContent = '🚀 Send Newsletter Now';
       }
     }
   </script>
 </body>
 </html>`;
 
-    return new Response(dashboardHtml, {
-      headers: { 'Content-Type': 'text/html; charset=utf-8' }
-    });
+      return new Response(dashboardHtml, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' }
+      });
+    }
+
+    return new Response('Not Found', { status: 404 });
   }
 };
