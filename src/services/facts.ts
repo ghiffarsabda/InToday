@@ -212,7 +212,13 @@ Output raw JSON only.`;
 
 function parseFactsContent(content: string): GeneratedContent {
   let cleanJson = content.trim();
-  if (cleanJson.startsWith('```')) {
+
+  // Extract JSON payload between the first '{' and the last '}'
+  const firstBrace = cleanJson.indexOf('{');
+  const lastBrace = cleanJson.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    cleanJson = cleanJson.substring(firstBrace, lastBrace + 1);
+  } else if (cleanJson.startsWith('```')) {
     cleanJson = cleanJson.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
   }
 
@@ -222,9 +228,9 @@ function parseFactsContent(content: string): GeneratedContent {
   } catch (err) {
     // Attempt automatic cleanup of trailing unclosed braces/quotes
     try {
-      const lastBrace = cleanJson.lastIndexOf('}');
-      if (lastBrace !== -1) {
-        const truncated = cleanJson.substring(0, lastBrace + 1);
+      const lastSafeBrace = cleanJson.lastIndexOf('}');
+      if (lastSafeBrace !== -1) {
+        const truncated = cleanJson.substring(0, lastSafeBrace + 1);
         parsed = JSON.parse(truncated);
       } else {
         throw err;
