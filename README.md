@@ -1,20 +1,48 @@
 # InToday ☀️
 
-A private, automated, zero-database daily intellectual newsletter powered by **Cloudflare Workers**, **OrcaRouter** (AI), **Resend**, and **Cron Triggers**.
+A private, automated, intelligent daily newsletter briefing powered by **Cloudflare Workers**, **Google Gemini 3.1 Flash-Lite**, **Cloudflare D1 SQLite**, and **Direct Gmail SMTP / Resend**.
 
 ---
 
-## ⚡️ Architecture & Flow
+## ⚡️ Architecture & Capabilities
 
-1. **Daily Cron Trigger (`wrangler.jsonc`)**: Runs every day (default: `0 8 * * *` / 08:00 UTC).
-2. **OrcaRouter AI Call**: Queries OrcaRouter's OpenAI-compatible inference endpoint to generate 4 distinct, non-cliché fun facts:
-   - 🌍 **Anything & Everything**: General curiosity, nature, science, history
-   - 📈 **Economics**: Surprising market dynamics, incentives, financial history
-   - ⚖️ **Law & Governance**: Legal precedents, unusual legislation, constitutional quirks
-   - 🧠 **Psychology**: Cognitive biases, behavioral experiments, human quirks
-3. **GitHub-Flavored Markdown Aesthetic**: Generates clean HTML & plain-text emails styled with GitHub's minimalist markdown design (subtle borders, monospaced badges, clean blockquotes, high legibility).
-4. **Resend Dispatch**: Dispatches the daily edition to your hardcoded subscriber list.
-5. **Web Preview & Dashboard**: Provides a built-in UI at `/` and `/preview` for instant testing without waiting for the cron.
+```
+               ┌──────────────────────────────────────────────┐
+               │    Cloudflare Cron (Daily 06:00 AM WIB)       │
+               └──────────────────────┬───────────────────────┘
+                                      │
+                                      ▼
+               ┌──────────────────────────────────────────────┐
+               │        Cloudflare Worker (`src/index.ts`)     │
+               └──────┬────────────────┬───────────────┬──────┘
+                      │                │               │
+                      ▼                ▼               ▼
+           ┌──────────────────┐ ┌──────────────┐ ┌────────────────────┐
+           │ Cloudflare D1    │ │ Google Gemini│ │ Cloudflare Sockets │
+           │ SQLite Memory    │ │ 3.1 Flash    │ │ Gmail SMTP / Resend│
+           │ (Subscribers &   │ │ (7 Insights +│ │ (Direct TLS 465    │
+           │ Topic History)   │ │ 3 Glossary)  │ │  from Gmail)       │
+           └──────────────────┘ └──────────────┘ └────────────────────┘
+```
+
+1. **Daily Cron Trigger (`0 23 * * *`)**:
+   - Runs automatically every morning at **06:00 AM WIB (23:00 UTC)**.
+2. **Google Gemini 3.1 Flash-Lite AI Pipeline**:
+   - Generates **7 micro-facts** across 7 distinct categories (*Anything & Everything, Economics, Law & Governance, Psychology, Tech & Computing, History & Civilizations, Philosophy & Human Nature*).
+   - Generates **3 developer & tech glossary items** with concise definitions and context.
+3. **Cloudflare D1 SQLite Topic Deduplication (Title-Only)**:
+   - Queries recent topic titles from D1 SQLite memory to prevent repeated topics.
+   - Title-only query saves ~85% input tokens on daily generation.
+4. **Direct Gmail SMTP Dispatch**:
+   - Connects via native TLS (`cloudflare:sockets`) to `smtp.gmail.com:465`.
+   - Sends directly from your real Gmail address (`ghiffarsabda@gmail.com`) to all subscribers with genuine DKIM/SPF signatures (no third-party domain verification needed).
+   - Falls back gracefully to Resend API if configured.
+5. **Interactive Web Control Center**:
+   - **Dashboard (`/`)**: Real-time status, live animated progress bar, stopwatch timer, and step-by-step dispatch checklist.
+   - **Live Preview (`/preview`)**: Full visual rendering of today's newsletter with one-click test dispatch.
+   - **Mailing List Manager (`/subscribers`)**: Add and remove subscribers via web UI or REST API.
+   - **Topic History Viewer (`/history`)**: Browse past generated topics stored in SQLite.
+   - **Admin Security Gate**: Protected by `ADMIN_KEY` with secure `HttpOnly` sessions.
 
 ---
 
@@ -23,78 +51,164 @@ A private, automated, zero-database daily intellectual newsletter powered by **C
 ```
 InToday/
 ├── src/
-│   ├── config.ts              # Hardcoded recipient list & category configurations
-│   ├── types.ts               # Data models and Env interface
-│   ├── index.ts               # Worker entrypoint (scheduled cron + fetch handler)
+│   ├── config.ts              # Category configurations & fallback defaults
+│   ├── types.ts               # TypeScript interfaces & Cloudflare Env types
+│   ├── index.ts               # Worker entrypoint (Cron handler + Web Control Center + Auth)
 │   ├── services/
-│   │   ├── facts.ts           # OrcaRouter API integration
-│   │   └── email.ts           # Resend dispatch service
+│   │   ├── db.ts              # Cloudflare D1 SQLite operations (subscribers & history)
+│   │   ├── gemini.ts          # Google Gemini 3.1 Flash-Lite AI service & JSON parser
+│   │   ├── smtp.ts            # Native Gmail SMTP over Cloudflare Sockets (TLS 465)
+│   │   ├── email.ts           # Unified email dispatch (Gmail SMTP primary + Resend fallback)
+│   │   └── facts.ts           # AI content router & multi-provider fallback
 │   └── templates/
-│       └── newsletter.ts      # GitHub-flavored HTML & text email templates
-├── .dev.vars.example          # Sample environment variables
-├── wrangler.jsonc             # Cloudflare Worker configuration & Cron triggers
+│       └── newsletter.ts      # GitHub-flavored HTML & plaintext email templates
+├── .dev.vars.example          # Sample environment variables template
+├── wrangler.jsonc             # Cloudflare Worker configuration, D1 database & Cron trigger
 ├── package.json
 └── tsconfig.json
 ```
 
 ---
 
+## 🔑 Environment Variables & Secrets
+
+| Secret / Variable | Description | Required |
+| :--- | :--- | :--- |
+| `GEMINI_API_KEY` | Google Gemini API Key | **Yes** (Primary AI) |
+| `GMAIL_USER` | Your Gmail address (e.g. `you@gmail.com`) | **Yes** (For Gmail SMTP) |
+| `GMAIL_APP_PASSWORD` | 16-letter Google App Password | **Yes** (For Gmail SMTP) |
+| `ADMIN_KEY` | Admin password for Web Control Center | **Yes** (Auth gate) |
+| `RESEND_API_KEY` | Resend API Key | Optional (Fallback) |
+| `OPENROUTER_API_KEY` | OpenRouter API Key | Optional (Fallback AI) |
+| `ORCAROUTER_API_KEY` | OrcaRouter API Key | Optional (Fallback AI) |
+
+---
+
 ## 🚀 Quick Setup & Local Development
 
-### 1. Configure Secrets
+### 1. Clone & Install Dependencies
 
-Create a `.dev.vars` file for local development:
+```bash
+git clone https://github.com/ghiffarsabda/InToday.git
+cd InToday
+npm install
+```
+
+### 2. Configure Local Secrets
+
+Create a `.dev.vars` file in the root directory:
 
 ```bash
 cp .dev.vars.example .dev.vars
 ```
 
-Edit `.dev.vars` with your API keys:
+Fill in your secrets in `.dev.vars`:
 
 ```ini
-ORCAROUTER_API_KEY=your_orcarouter_api_key_here
-RESEND_API_KEY=re_your_resend_api_key_here
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-3.1-flash-lite
+GMAIL_USER=your_email@gmail.com
+GMAIL_APP_PASSWORD=your_16_letter_app_password
+ADMIN_KEY=your_admin_password
+RESEND_API_KEY=re_your_resend_key
 ```
 
-### 2. Configure Subscribers
+### 3. Initialize Local D1 Database
 
-Open [`src/config.ts`](file:///home/ghiffar-sabda/InToday/src/config.ts) and add your list of recipient emails:
-
-```typescript
-export const RECIPIENT_EMAILS: string[] = [
-  'you@example.com',
-  'friend@example.com'
-];
+```bash
+# Create local tables
+npx wrangler d1 execute intoday-db --local --command "
+CREATE TABLE IF NOT EXISTS history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  date TEXT NOT NULL,
+  category TEXT NOT NULL,
+  title TEXT NOT NULL,
+  summary TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS subscribers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT UNIQUE NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+"
 ```
 
-### 3. Start Local Development Server
+### 4. Start Local Dev Server
 
 ```bash
 npm run dev
 ```
 
-Visit:
-- **Dashboard:** `http://localhost:8787/` (Check status, trigger manual send)
-- **Live HTML Preview:** `http://localhost:8787/preview` (Inspect the rendered email)
-- **Facts JSON API:** `http://localhost:8787/api/facts`
+Visit **`http://localhost:8787`** in your browser and enter your `ADMIN_KEY` to access the Control Center!
 
 ---
 
 ## 🚢 Production Deployment
 
-### 1. Set Production Secrets
-
-Upload your secrets securely to Cloudflare:
+### 1. Create Cloudflare D1 Database
 
 ```bash
-npx wrangler secret put ORCAROUTER_API_KEY
-npx wrangler secret put RESEND_API_KEY
+npx wrangler d1 create intoday-db
 ```
 
-### 2. Deploy Worker
+Copy the generated `database_id` into [`wrangler.jsonc`](file:///home/ghiffar-sabda/InToday/wrangler.jsonc).
+
+### 2. Initialize Remote D1 Tables
+
+```bash
+npx wrangler d1 execute intoday-db --remote --command "
+CREATE TABLE IF NOT EXISTS history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  date TEXT NOT NULL,
+  category TEXT NOT NULL,
+  title TEXT NOT NULL,
+  summary TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS subscribers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT UNIQUE NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+"
+```
+
+### 3. Set Production Secrets
+
+```bash
+echo "your_gemini_api_key" | npx wrangler secret put GEMINI_API_KEY
+echo "your_gmail@gmail.com" | npx wrangler secret put GMAIL_USER
+echo "your_app_password" | npx wrangler secret put GMAIL_APP_PASSWORD
+echo "your_admin_password" | npx wrangler secret put ADMIN_KEY
+echo "re_your_resend_key" | npx wrangler secret put RESEND_API_KEY
+```
+
+### 4. Deploy to Cloudflare Workers
 
 ```bash
 npm run deploy
 ```
 
-The worker will automatically run every day at 08:00 UTC via Cloudflare Cron Triggers. You can adjust the schedule in [`wrangler.jsonc`](file:///home/ghiffar-sabda/InToday/wrangler.jsonc).
+---
+
+## 🌐 Web Endpoints & REST APIs
+
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/` | `GET` | Main Control Center dashboard with live dispatch progress tracker |
+| `/preview` | `GET` | Live rendered HTML preview of today's newsletter |
+| `/subscribers` | `GET` | Interactive mailing list manager |
+| `/history` | `GET` | SQLite topic history viewer |
+| `/send` | `POST` | Manually trigger generation & dispatch |
+| `/login` | `GET/POST`| Security verification gate |
+| `/logout` | `GET` | Clear session cookie |
+| `/api/subscribers` | `GET/POST/DELETE` | REST API for managing subscribers |
+| `/api/history` | `GET` | JSON endpoint for topic history |
+| `/api/facts` | `GET` | JSON endpoint for today's generated facts |
+
+---
+
+## 📄 License
+
+MIT © [Ghiffar Sabda](https://github.com/ghiffarsabda)

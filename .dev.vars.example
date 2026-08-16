@@ -1,9 +1,17 @@
-# OrcaRouter API Key (get from https://orcarouter.ai)
-ORCAROUTER_API_KEY=your_orcarouter_api_key_here
+# Google Gemini API Key (get from https://aistudio.google.com)
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-3.1-flash-lite
 
-# Resend API Key (get from https://resend.com)
+# Gmail SMTP Dispatch (Direct from your Gmail account)
+GMAIL_USER=your_email@gmail.com
+GMAIL_APP_PASSWORD=your_16_letter_google_app_password
+
+# Admin Security Gate Password
+ADMIN_KEY=your_admin_password_here
+
+# Resend API Key (get from https://resend.com) - Optional Fallback
 RESEND_API_KEY=re_your_resend_api_key_here
 
-# Optional overrides (defaults in wrangler.jsonc)
-# FROM_EMAIL="InToday <newsletter@yourdomain.com>"
-# ORCAROUTER_MODEL="orcarouter/auto"
+# Optional Fallback AI Providers
+# OPENROUTER_API_KEY=your_openrouter_key
+# ORCAROUTER_API_KEY=your_orcarouter_key
