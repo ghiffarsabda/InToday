@@ -28,11 +28,11 @@ export const CATEGORY_DEFINITIONS: Record<FactCategory, { label: string; emoji: 
 };
 
 const TOPIC_SEEDS = [
-  'astronomy mysteries, pricing psychology, unusual maritime dispute laws, memory biases, Majapahit spice trade fleet, the Islamic principle of Husnuzan (good assumptions) and controlling anger, viewing morning sunlight for circadian cortisol',
-  'deep-sea bioluminescence, the sunk cost trap in daily choices, bizarre medieval animal trials, the bystander effect, ancient Roman self-repairing concrete, the Sunnah habit of mindful eating and sitting while drinking, the 20-20-20 rule for eye strain and screen fatigue',
-  'food chemistry petrichor, perverse incentives and cobra effects, strange municipal laws, the pratfall effect (clumsiness makes you likable), Fatima al-Fihri founding the oldest university, the Islamic practice of Tahajjud / morning Dhikr for mental calm, drinking a glass of water with a pinch of mineral salt upon waking',
-  'quantum mechanics in daily electronics, artificial scarcity in marketing, copyright oddities, cognitive dissonance, Nusantara kingdom diplomatic letters, the prophetic advice on gentle speech and avoiding gossip (Ghibah), taking a 10-minute post-meal walk to blunt glucose spikes',
-  'cellular regeneration, market bubbles and mania history, ancient sumerian laws, optimism bias, Malacca maritime trade hub, Prophet Muhammad advice on taking breaks during stress, cold water face immersion for vagus nerve stimulation'
+  'quantum entanglement in biology, dynamic surge pricing algorithms, air rights real estate law, the choice overload paradox, Sriwijaya naval trade diplomacy, the Islamic etiquette of expressing daily gratitude (Shukr) and helping neighbors, nasal breathing for nitric oxide production',
+  'extremophile organisms in volcanic vents, the tragedy of the commons in shared workspaces, space salvage and celestial property law, the Dunning-Kruger effect in learning, ancient Egyptian worker compensation records, the Sunnah habit of sincere smiling and keeping promises (Amanah), 90-minute ultradian focus cycles',
+  'planetary magnetic shield physics, the decoy effect in menu and subscription pricing, ancient dispute resolution tablets, the peak-end rule in memory formation, the Silk Road paper-making revolution, the prophetic practice of early morning productivity (Barakah in early hours), post-meal light walking for glucose balance',
+  'plant communication via underground mycelium networks, opportunity cost in personal time decisions, treasure trove discovery law, cognitive reframing under pressure, Borobudur relief geometry, the Islamic discipline of speaking gentle words and avoiding suspicion, 20-20-20 rule for digital eye strain',
+  'gravitational lensing and dark matter clues, network effects and marketplace moats, copyright protection quirks, the spotlight effect in social gatherings, the Banda Islands spice trade treaty of 1667, the Sunnah practice of forgiving others before sleeping, cold water face splashes for vagus nerve calming'
 ];
 
 /**
