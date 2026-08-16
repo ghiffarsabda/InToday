@@ -1,4 +1,4 @@
-import { Env, FactItem, GlossaryItem, NewsItem } from '../types';
+import { Env, FactItem, GlossaryItem, NewsItem, NewsSentiment } from '../types';
 import { NEWSLETTER_CONFIG } from '../config';
 import { fetchLiveRssFeeds, RawNewsItem } from './news';
 
@@ -50,23 +50,25 @@ export async function fetchDailyContent(env: Env): Promise<GeneratedContent> {
 
   const globalHeadlinesStr = liveRss.globalNews.length > 0
     ? liveRss.globalNews.map((n, i) => `${i + 1}. [${n.source}] ${n.title} (URL: ${n.link})`).join('\n')
-    : '1. [Reuters] Major breakthrough in global technology sparks debate.\n2. [BBC] Unexpected international travel and lifestyle rules announced.';
+    : '1. [Reuters] Major breakthrough in global green energy.\n2. [BBC] Unexpected AI copyright lawsuit sparks controversy.';
 
   const idHeadlinesStr = liveRss.indonesiaNews.length > 0
     ? liveRss.indonesiaNews.map((n, i) => `${i + 1}. [${n.source}] ${n.title} (URL: ${n.link})`).join('\n')
-    : '1. [Detik] Kebijakan baru transportasi dan fasilitas publik jadi sorotan.\n2. [Kompas] Fenomena tren viral baru di kalangan anak muda perkotaan.';
+    : '1. [Detik] Ekspor nikel dan baterai mobil listrik melonjak.\n2. [Kompas] Perdebatan aturan baru subsidi bahan bakar.';
 
   const userPrompt = `You are the chief curator of "InToday", a daily newsletter designed to make the reader the most interesting, informed, and conversation-ready person in the room.
 
 EDITORIAL MANDATE:
-1. Filter out dry bureaucratic announcements. Pick the 5 most sensational, buzzworthy, and talk-about-with-friends stories globally, and 5 in Indonesia.
-2. The stories should be fascinating topics you'd bring up when hanging out with normal friends. Keep the tone sharp, punchy, and conversational (easy for junior high/high schoolers to digest).
-3. Under every news story, provide a practical "takeaway" answering: "How does this affect you / everyday people?" (impact on daily life, wallet, technology, habits, or the future).
+For BOTH Global News and Indonesia News, curate EXACTLY 6 stories each (12 total news stories), structured as:
+- 2 "good" (uplifting progress, positive breakthroughs, or inspiring wins)
+- 2 "bad" (critical challenges, crises, hard realities, or cautionary events)
+- 2 "wdyt" ("What Do You Think?" - controversial, polarizing topics that spark debate with no clear right answer)
 
 For each story:
 - "title": Catchy, intriguing headline
-- "summary": 2 punchy, engaging sentences explaining what happened in plain English
-- "takeaway": 1-2 simple sentences explaining how this affects you and your daily life
+- "summary": 2 punchy, simple sentences explaining what happened in plain English
+- "takeaway": 1-2 simple sentences explaining how this affects everyday people
+- "sentiment": Exactly "good", "bad", or "wdyt"
 - "source": Publisher name
 - "url": Extracted URL or publisher website
 
@@ -79,22 +81,24 @@ ${globalHeadlinesStr}
 INDONESIA:
 ${idHeadlinesStr}
 
-Return JSON ONLY with this schema:
+Return strictly a JSON object with this schema:
 {
   "globalNews": [
     {
-      "title": "Catchy Headline",
-      "summary": "Juicy, easy-to-understand breakdown.",
-      "takeaway": "How this affects you in everyday life.",
+      "title": "Headline",
+      "summary": "Plain English summary.",
+      "takeaway": "How this affects you.",
+      "sentiment": "good",
       "source": "Source Name",
       "url": "https://..."
     }
   ],
   "indonesiaNews": [
     {
-      "title": "Catchy Headline",
-      "summary": "Juicy, easy-to-understand breakdown.",
-      "takeaway": "How this affects you in everyday life.",
+      "title": "Headline",
+      "summary": "Plain English summary.",
+      "takeaway": "How this affects you.",
+      "sentiment": "good",
       "source": "Source Name",
       "url": "https://..."
     }
@@ -137,7 +141,7 @@ Return JSON ONLY with this schema:
   ]
 }
 
-Ensure "globalNews" has 5 items and "indonesiaNews" has 5 items. Output raw JSON only.`;
+Ensure "globalNews" has 6 items (2 good, 2 bad, 2 wdyt) and "indonesiaNews" has 6 items (2 good, 2 bad, 2 wdyt). Output raw JSON only.`;
 
   const messages: OrcaMessage[] = [
     { role: 'user', content: userPrompt }
@@ -157,7 +161,7 @@ Ensure "globalNews" has 5 items and "indonesiaNews" has 5 items. Output raw JSON
         model: model,
         messages: messages,
         temperature: 0.6,
-        max_tokens: 3800
+        max_tokens: 4096
       }),
       signal: controller.signal
     });
@@ -200,25 +204,34 @@ function parseAndEnrichContent(
     throw new Error(`Failed to parse AI JSON response: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  // Parse Global News
-  const globalNews: NewsItem[] = (parsed.globalNews || []).slice(0, 5).map((item: any, i: number) => {
+  const normalizeSentiment = (s: string): NewsSentiment => {
+    const lower = (s || '').toLowerCase();
+    if (lower.includes('good')) return 'good';
+    if (lower.includes('bad')) return 'bad';
+    return 'wdyt';
+  };
+
+  // Parse Global News (6 items)
+  const globalNews: NewsItem[] = (parsed.globalNews || []).slice(0, 6).map((item: any, i: number) => {
     const matchedRss = liveRss.globalNews[i];
     return {
-      title: item.title || matchedRss?.title || 'Global News Update',
-      summary: item.summary || 'A major development everyone around the world is talking about today.',
-      takeaway: item.takeaway || 'Stay informed about changing global trends and how they impact everyday lives.',
+      title: item.title || matchedRss?.title || 'Global News Story',
+      summary: item.summary || 'Important developments happening around the world.',
+      takeaway: item.takeaway || 'Stay informed about shifting global tides and their impact.',
+      sentiment: normalizeSentiment(item.sentiment),
       source: item.source || matchedRss?.source || 'International Press',
       url: item.url || matchedRss?.link || 'https://news.google.com'
     };
   });
 
-  // Parse Indonesia News
-  const indonesiaNews: NewsItem[] = (parsed.indonesiaNews || []).slice(0, 5).map((item: any, i: number) => {
+  // Parse Indonesia News (6 items)
+  const indonesiaNews: NewsItem[] = (parsed.indonesiaNews || []).slice(0, 6).map((item: any, i: number) => {
     const matchedRss = liveRss.indonesiaNews[i];
     return {
-      title: item.title || matchedRss?.title || 'Indonesia News Update',
-      summary: item.summary || 'A hot topic making waves across Indonesia today.',
+      title: item.title || matchedRss?.title || 'Indonesia News Story',
+      summary: item.summary || 'Important developments happening across Indonesia.',
       takeaway: item.takeaway || 'This directly affects public services, local communities, or national trends.',
+      sentiment: normalizeSentiment(item.sentiment),
       source: item.source || matchedRss?.source || 'Indonesian Media',
       url: item.url || matchedRss?.link || 'https://news.google.com'
     };
@@ -258,8 +271,8 @@ function parseAndEnrichContent(
 
   if (glossary.length === 0) {
     glossary.push({
-      term: 'Viral Phenomenon',
-      definition: 'An event or trend that spreads rapidly through social networks and word-of-mouth.'
+      term: 'Polarizing Debate',
+      definition: 'A discussion where people hold strongly opposing viewpoints with valid arguments on both sides.'
     });
   }
 
@@ -267,82 +280,114 @@ function parseAndEnrichContent(
 }
 
 /**
- * Curated fallback content loaded with talk-worthy topics and takeaways
+ * Curated fallback content loaded with 2 good, 2 bad, and 2 wdyt news for both Global and Indonesia
  */
 export function getCuratedContentFallback(): GeneratedContent {
   return {
     globalNews: [
+      // 🟢 2 Good News
       {
-        title: 'Scientists Accidentally Discovered How to Turn Plastic Into Real Diamonds',
-        summary: 'Researchers in Germany used high-powered lasers to blast everyday PET plastic bottles, replicating the extreme core pressure of giant planets and creating microscopic real diamonds.',
-        takeaway: 'In the future, recycling everyday plastic waste could help create super-durable electronic chips and medical instruments at a fraction of the cost.',
+        title: 'Scientists Accidentally Discovered How to Turn Plastic Bottles Into Real Diamonds',
+        summary: 'Researchers in Germany used high-powered lasers to blast everyday PET plastic, replicating planetary pressures and creating microscopic diamonds for tech chips.',
+        takeaway: 'In the near future, recycling everyday plastic waste could help manufacture ultra-durable medical lasers and quantum computers cheaply.',
+        sentiment: 'good',
         source: 'Science Daily',
         url: 'https://www.sciencedaily.com'
       },
       {
-        title: 'South Korea is Replacing Traditional Cashiers with AI Face Recognition Everywhere',
-        summary: 'Over 3,000 convenience stores across Seoul now allow customers to grab snacks and walk straight out the door by scanning their smiling face in under 0.5 seconds.',
-        takeaway: 'Wallet-free and phone-free shopping is becoming the global standard, meaning you will soon never have to wait in a checkout line again.',
-        source: 'Korea Times',
-        url: 'https://www.koreatimes.co.kr'
+        title: 'Renewable Solar Power Officially Surpassed Coal in Several Major Global Economies',
+        summary: 'Record-low panel manufacturing costs made solar and wind energy the primary source of national electricity generation this month across Europe and parts of Asia.',
+        takeaway: 'Cleaner air and a rapid drop in renewable hardware costs translate to lower long-term household utility bills across the world.',
+        sentiment: 'good',
+        source: 'Reuters',
+        url: 'https://www.reuters.com'
       },
+      // 🔴 2 Bad News
       {
-        title: 'New Global Study Reveals Why Everyone Feels Like Time is Passing Faster',
-        summary: 'Neuroscientists discovered that because we consume so much rapid-fire short video content, our brain creates fewer novel memory checkpoints, tricking us into feeling months evaporate.',
-        takeaway: 'Taking periodic breaks from endless scrolling and doing new offline activities actually helps your brain slow down your perception of time.',
+        title: 'Massive Solar Flare Unleashes Radio Blackouts Along International Flight Paths',
+        summary: 'An intense coronal mass ejection from the sun blinded high-frequency aviation satellites, forcing transatlantic airlines to take costly long-distance detours.',
+        takeaway: 'Solar weather storms can disrupt airline flight schedules and cause slight GPS navigation and signal drops on your personal phone.',
+        sentiment: 'bad',
         source: 'BBC Science',
         url: 'https://www.bbc.com'
       },
       {
-        title: 'Major Flight Routes Are Being Rerouted Due to Solar Storm Radio Blackouts',
-        summary: 'A series of massive solar flares from the sun disrupted high-frequency aviation satellites, forcing international airlines on polar routes to take long detours.',
-        takeaway: 'Solar weather can cause unexpected flight delays and slight GPS navigation glitches on your personal devices during severe solar storms.',
-        source: 'Reuters',
-        url: 'https://www.reuters.com'
+        title: 'Global Cocoa Shortage Sends Chocolate Prices to Historic All-Time Highs',
+        summary: 'Extreme weather in West Africa destroyed nearly 30% of the world’s cacao harvest, causing global confectionery prices to double almost overnight.',
+        takeaway: 'Expect your favorite chocolate bars, baked goods, and hot cocoa drinks to become noticeably pricier at grocery stores this year.',
+        sentiment: 'bad',
+        source: 'Bloomberg',
+        url: 'https://www.bloomberg.com'
+      },
+      // 🟣 2 WDYT News
+      {
+        title: 'South Korea is Replacing Human Cashiers with AI Facial Scanners in 3,000 Stores',
+        summary: 'Shoppers now walk in, grab snacks, and leave as cameras scan their smiling face in 0.4 seconds to charge their bank accounts automatically.',
+        takeaway: 'While it completely eliminates checkout lines, critics argue that giving corporations real-time biometric tracking is a major privacy trade-off.',
+        sentiment: 'wdyt',
+        source: 'Korea Times',
+        url: 'https://www.koreatimes.co.kr'
       },
       {
-        title: 'A Remote Island in Japan is Paying Young People $10,000 to Move and Farm Seaweed',
-        summary: 'To combat an aging population, a scenic island near Okinawa is offering free housing, high-speed fiber internet, and cash grants to anyone under 35 willing to relocate.',
-        takeaway: 'As remote work expands, global cities and islands are competing directly to offer free rent and perks to attract young talent.',
-        source: 'Japan Today',
-        url: 'https://japantoday.com'
+        title: 'Sweden Debates Banning All Smartphones in Schools for Kids Under 15',
+        summary: 'The government proposed a strict ban on all screens and phones in classrooms to boost attention spans and test scores, igniting fiery debates among parents and tech advocates.',
+        takeaway: 'Is taking away digital tools protecting young minds from addiction, or holding them back from learning the digital skills needed for the future?',
+        sentiment: 'wdyt',
+        source: 'The Guardian',
+        url: 'https://www.theguardian.com'
       }
     ],
     indonesiaNews: [
+      // 🟢 2 Good News
       {
-        title: 'Kereta Cepat Whoosh Tambah Rute Baru & Tembus 5 Juta Penumpang',
-        summary: 'Lonjakan minat liburan membuat antrean Whoosh Jakarta-Bandung membludak, dan rencana perpanjangan jalur langsung menuju Surabaya kini resmi mulai disurvei.',
-        takeaway: 'Perjalanan antar kota di Pulau Jawa akan semakin hemat waktu, membuka peluang bisnis dan pariwisata akhir pekan yang jauh lebih fleksibel.',
+        title: 'Kereta Cepat Whoosh Tembus 5 Juta Penumpang & Mulai Survei Rute Surabaya',
+        summary: 'Layanan Whoosh Jakarta-Bandung catatkan tingkat okupansi 90%+ dan studi kelayakan jalur lanjutan menuju Yogyakarta-Surabaya resmi dimulai.',
+        takeaway: 'Waktu tempuh antar kota besar di Pulau Jawa akan terpangkas drastis, mempermudah liburan akhir pekan dan perjalanan dinas.',
+        sentiment: 'good',
         source: 'Detik Travel',
         url: 'https://travel.detik.com'
       },
       {
-        title: 'Fenomena "Coffeeshop Tanpa Barista" Pertama di Jakarta Bikin Heboh',
-        summary: 'Kafe berbasis lengan robotik pintar di Jakarta Selatan menyajikan racikan kopi artisan dengan akurasi suhu 0.1 derajat tanpa ada satu pun pelayan manusia.',
-        takeaway: 'Otomatisasi F&B kini merambah gaya hidup lokal, membuat pesanan kopi lebih konsisten dan cepat tanpa antrean panjang.',
+        title: 'Kopi Specialty Indonesia Sabet Juara Dunia di Milan Coffee Expo',
+        summary: 'Biji Arabika Gayo dan Luwak Liar khas Nusantara memenangkan piala emas di Milan, membuat pesanan ekspor dari kafe mewah Eropa melonjak.',
+        takeaway: 'Menaikkan pamor dan harga jual petani kopi lokal di panggung internasional serta menyumbang devisa ekspor negara.',
+        sentiment: 'good',
+        source: 'Antara News',
+        url: 'https://www.antaranews.com'
+      },
+      // 🔴 2 Bad News
+      {
+        title: 'Harga Tiket Pesawat Domestik Masih Tinggi Akibat Lonjakan Biaya Avtur',
+        summary: 'Maskapai penerbangan nasional menghadapi beban biaya bahan bakar dan suku cadang impor yang menekan frekuensi rute antar pulau.',
+        takeaway: 'Rencana liburan antar pulau perlu dianggarkan lebih awal karena harga tiket pesawat liburan belum menunjukkan tanda penurunan.',
+        sentiment: 'bad',
+        source: 'CNBC Indonesia',
+        url: 'https://www.cnbcindonesia.com'
+      },
+      {
+        title: 'Kasus Kejahatan Phishing Link APK Palsu Masih Mengintai Pengguna Mobile Banking',
+        summary: 'Pihak kepolisian mengingatkan masyarakat untuk waspada terhadap modus penipuan kiriman undangan atau tagihan fiktif lewat WhatsApp.',
+        takeaway: 'Jangan pernah klik atau instal file .APK dari nomor tidak dikenal agar saldo rekening dan data pribadi tetap aman.',
+        sentiment: 'bad',
+        source: 'Kompas Tekno',
+        url: 'https://tekno.kompas.com'
+      },
+      // 🟣 2 WDYT News
+      {
+        title: 'Uji Coba Kafe Tanpa Barista Berbasis Lengan Robotik di Jakarta Selatan',
+        summary: 'Kafe modern pertama yang 100% menggunakan lengan robotik untuk meracik kopi artisan viral dan memicu perdebatan soal nasib lapangan kerja barista muda.',
+        takeaway: 'Apakah kamu lebih suka kecepatan dan konsistensi mesin robot, atau kehangatan interaksi dan seni racikan dari barista manusia?',
+        sentiment: 'wdyt',
         source: 'Kompas Lifestyle',
         url: 'https://lifestyle.kompas.com'
       },
       {
-        title: 'Aturan Baru Tilang Elektronik (ETLE) Drone Mulai Berpatroli di Jalan Tol',
-        summary: 'Korlantas Polri memperluas pengawasan jalan tol menggunakan drone canggih yang bisa mendeteksi pengendara main HP atau ugal-ugalan dari ketinggian 50 meter.',
-        takeaway: 'Pastikan selalu fokus berkendara dan tidak menyentuh ponsel saat mengemudi di jalan tol agar terhindar dari tilang otomatis.',
+        title: 'Penerapan Tilang Elektronik Drone di Jalan Tol Menuai Pro-Kontra Pengemudi',
+        summary: 'Korlantas Polri menerbangkan drone berteknologi kamera AI untuk memotret pengendara yang main ponsel atau melanggar marka jalan dari udara.',
+        takeaway: 'Sebagian mengapresiasi penegakan hukum yang makin disiplin, sementara yang lain merasa was-was privasinya diawasi dari langit.',
+        sentiment: 'wdyt',
         source: 'Tribun News',
         url: 'https://www.tribunnews.com'
-      },
-      {
-        title: 'Kopi Specialty Indonesia Jadi Rebutan di Pameran Dunia Milan',
-        summary: 'Biji kopi luwak liar dan Arabika Gayo berhasil menyabet penghargaan tertinggi di Milan Expo, membuat pesanan dari kafe-kafe mewah Eropa melonjak.',
-        takeaway: 'Popularitas komoditas lokal di panggung dunia menaikkan daya tawar petani Indonesia dan membuka peluang ekspor yang menguntungkan.',
-        source: 'Antara News',
-        url: 'https://www.antaranews.com'
-      },
-      {
-        title: 'Rupiah Menguat Tajam Berkat Lonjakan Investasi Pabrik Baterai EV Global',
-        summary: 'Dua raksasa otomotif dunia resmi memulai pembangunan pabrik sel baterai raksasa di Jawa Barat, menyuntikkan likuiditas miliaran dolar ke pasar domestik.',
-        takeaway: 'Penguatan Rupiah membantu menstabilkan harga gadget impor dan kebutuhan pokok, serta membuka ribuan lapangan kerja teknis baru.',
-        source: 'CNBC Indonesia',
-        url: 'https://www.cnbcindonesia.com'
       }
     ],
     facts: [

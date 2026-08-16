@@ -5,7 +5,7 @@ export interface RawNewsItem {
   sourceUrl?: string;
 }
 
-export function parseRssFeed(xmlText: string, limit = 12): RawNewsItem[] {
+export function parseRssFeed(xmlText: string, limit = 15): RawNewsItem[] {
   const items: RawNewsItem[] = [];
   const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
   let match: RegExpExecArray | null;
@@ -74,17 +74,17 @@ export async function fetchLiveRssFeeds(): Promise<{
 
   if (worldRes.status === 'fulfilled' && worldRes.value.ok) {
     const text = await worldRes.value.text();
-    globalNews.push(...parseRssFeed(text, 8));
+    globalNews.push(...parseRssFeed(text, 10));
   }
 
   if (techRes.status === 'fulfilled' && techRes.value.ok) {
     const text = await techRes.value.text();
-    globalNews.push(...parseRssFeed(text, 6));
+    globalNews.push(...parseRssFeed(text, 8));
   }
 
   if (idRes.status === 'fulfilled' && idRes.value.ok) {
     const text = await idRes.value.text();
-    indonesiaNews = parseRssFeed(text, 14);
+    indonesiaNews = parseRssFeed(text, 18);
   }
 
   return { globalNews, indonesiaNews };
