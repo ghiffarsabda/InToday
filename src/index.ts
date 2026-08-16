@@ -1062,7 +1062,10 @@ export default {
 </html>`;
 
       return new Response(dashboardHtml, {
-        headers: { 'Content-Type': 'text/html; charset=utf-8' }
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0'
+        }
       });
     }
 
@@ -1203,6 +1206,9 @@ function renderLoginHtml(errorMsg?: string): Response {
 
   return new Response(html, {
     status: 401,
-    headers: { 'Content-Type': 'text/html; charset=utf-8' }
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store, must-revalidate'
+    }
   });
 }
