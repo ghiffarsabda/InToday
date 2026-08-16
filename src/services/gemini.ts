@@ -20,7 +20,7 @@ interface GeminiGenerateResponse {
 
 /**
  * Generates fresh daily facts using Google Gemini API.
- * Supports Gemini 3.1 Flash-Lite / Gemini 2.5 Flash with native JSON mode.
+ * Uses Gemini 3.1 Flash-Lite with native JSON mode.
  */
 export async function generateContentWithGemini(env: Env): Promise<GeneratedContent> {
   const apiKey = env.GEMINI_API_KEY;
@@ -28,7 +28,7 @@ export async function generateContentWithGemini(env: Env): Promise<GeneratedCont
     throw new Error('GEMINI_API_KEY is missing in environment variables.');
   }
 
-  const model = env.GEMINI_MODEL || 'gemini-2.5-flash'; // or gemini-3.1-flash-lite / gemini-2.5-flash-lite
+  const model = env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
   const todayKey = new Date().toISOString().split('T')[0];
 
   // 1. Fetch recent topic history from SQLite database
@@ -48,7 +48,7 @@ export async function generateContentWithGemini(env: Env): Promise<GeneratedCont
   const timestamp = `${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
   const promptText = `You are the chief editor of "InToday", a high-signal daily briefing newsletter for students and modern readers.
-Task (${timestamp}): Generate 7 BRAND-NEW, NEVER-BEFORE-SEEN insights across human knowledge.
+Task (${timestamp}): Generate 7 BRAND-NEW, NEVER-BEFORE-SEEN insights across human knowledge. Keep explanations concise and clear.
 ${pastTopicsPrompt}
 Generate EXACTLY 1 item for each of the 7 categories:
 1. "science" - Science (a fascinating natural/physics/astronomy discovery + relatable real-world example)
@@ -102,7 +102,7 @@ Return valid JSON matching this schema:
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0.7,
-        maxOutputTokens: 3500
+        maxOutputTokens: 6000
       }
     })
   });
@@ -113,17 +113,34 @@ Return valid JSON matching this schema:
   }
 
   const data = (await response.json()) as GeminiGenerateResponse;
-  const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  let rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
   if (!rawJson) {
     throw new Error('Google Gemini returned an empty response.');
+  }
+
+  // Clean JSON bounds
+  rawJson = rawJson.trim();
+  const firstBrace = rawJson.indexOf('{');
+  const lastBrace = rawJson.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    rawJson = rawJson.substring(firstBrace, lastBrace + 1);
   }
 
   let parsed: any;
   try {
     parsed = JSON.parse(rawJson);
   } catch (err) {
-    throw new Error(`Failed to parse Gemini JSON: ${err instanceof Error ? err.message : String(err)}`);
+    try {
+      const lastSafeBrace = rawJson.lastIndexOf('}');
+      if (lastSafeBrace !== -1) {
+        parsed = JSON.parse(rawJson.substring(0, lastSafeBrace + 1));
+      } else {
+        throw err;
+      }
+    } catch (inner) {
+      throw new Error(`Failed to parse Gemini JSON: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   const allCategories: FactCategory[] = [
