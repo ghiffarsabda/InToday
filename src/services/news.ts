@@ -1,14 +1,16 @@
 export interface RawNewsItem {
+  id: string;
   title: string;
   link: string;
   source: string;
-  sourceUrl?: string;
+  snippet?: string;
 }
 
-export function parseRssFeed(xmlText: string, limit = 15): RawNewsItem[] {
+export function parseRssFeed(xmlText: string, sourceName: string, prefix: string, limit = 12): RawNewsItem[] {
   const items: RawNewsItem[] = [];
   const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
   let match: RegExpExecArray | null;
+  let count = 1;
 
   while ((match = itemRegex.exec(xmlText)) !== null) {
     const itemContent = match[1];
@@ -16,33 +18,34 @@ export function parseRssFeed(xmlText: string, limit = 15): RawNewsItem[] {
     // Extract Title
     const titleMatch = /<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i.exec(itemContent);
     let title = titleMatch ? titleMatch[1].trim() : '';
-    title = title.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+    title = title.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ');
 
-    // Extract Link
+    // Extract Link (handle <link>...</link> or <link href="..." /> or <guid isPermaLink="true">...</guid>)
+    let link = '';
     const linkMatch = /<link>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/link>/i.exec(itemContent);
-    const link = linkMatch ? linkMatch[1].trim() : '';
-
-    // Extract Source Name & URL
-    const sourceMatch = /<source\s+url="([^"]*)"[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/source>/i.exec(itemContent);
-    let sourceName = sourceMatch ? sourceMatch[2].trim() : '';
-    const sourceUrl = sourceMatch ? sourceMatch[1].trim() : '';
-
-    // Clean source name suffix from title
-    if (!sourceName && title.includes(' - ')) {
-      const parts = title.split(' - ');
-      sourceName = parts[parts.length - 1].trim();
-      title = parts.slice(0, -1).join(' - ').trim();
-    } else if (sourceName && title.endsWith(` - ${sourceName}`)) {
-      title = title.slice(0, -(sourceName.length + 3)).trim();
+    if (linkMatch && linkMatch[1].trim().startsWith('http')) {
+      link = linkMatch[1].trim();
+    } else {
+      const guidMatch = /<guid[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/guid>/i.exec(itemContent);
+      if (guidMatch && guidMatch[1].trim().startsWith('http')) {
+        link = guidMatch[1].trim();
+      }
     }
 
-    if (title && (link || sourceName)) {
+    // Extract Description / Snippet
+    const descMatch = /<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/i.exec(itemContent);
+    let snippet = descMatch ? descMatch[1].replace(/<[^>]+>/g, '').trim() : '';
+    if (snippet.length > 200) snippet = snippet.slice(0, 197) + '...';
+
+    if (title && link) {
       items.push({
+        id: `${prefix}${count}`,
         title,
         link,
-        source: sourceName || 'News Source',
-        sourceUrl
+        source: sourceName,
+        snippet
       });
+      count++;
     }
 
     if (items.length >= limit) break;
@@ -55,36 +58,38 @@ export async function fetchLiveRssFeeds(): Promise<{
   globalNews: RawNewsItem[];
   indonesiaNews: RawNewsItem[];
 }> {
-  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
-  const [worldRes, techRes, idRes] = await Promise.allSettled([
-    fetch('https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-US&gl=US&ceid=US:en', {
-      headers: { 'User-Agent': userAgent }
-    }),
-    fetch('https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=en-US&gl=US&ceid=US:en', {
-      headers: { 'User-Agent': userAgent }
-    }),
-    fetch('https://news.google.com/rss?hl=id&gl=ID&ceid=ID:id', {
-      headers: { 'User-Agent': userAgent }
-    })
+  const [guardianWorldRes, guardianTechRes, cnbcIdRes, antaraIdRes] = await Promise.allSettled([
+    fetch('https://www.theguardian.com/world/rss', { headers: { 'User-Agent': userAgent } }),
+    fetch('https://www.theguardian.com/technology/rss', { headers: { 'User-Agent': userAgent } }),
+    fetch('https://www.cnbcindonesia.com/news/rss', { headers: { 'User-Agent': userAgent } }),
+    fetch('https://www.antaranews.com/rss/terkini.xml', { headers: { 'User-Agent': userAgent } })
   ]);
 
-  let globalNews: RawNewsItem[] = [];
-  let indonesiaNews: RawNewsItem[] = [];
+  const globalNews: RawNewsItem[] = [];
+  const indonesiaNews: RawNewsItem[] = [];
 
-  if (worldRes.status === 'fulfilled' && worldRes.value.ok) {
-    const text = await worldRes.value.text();
-    globalNews.push(...parseRssFeed(text, 10));
+  // Parse Global Feeds
+  if (guardianWorldRes.status === 'fulfilled' && guardianWorldRes.value.ok) {
+    const text = await guardianWorldRes.value.text();
+    globalNews.push(...parseRssFeed(text, 'The Guardian', 'GW', 8));
   }
 
-  if (techRes.status === 'fulfilled' && techRes.value.ok) {
-    const text = await techRes.value.text();
-    globalNews.push(...parseRssFeed(text, 8));
+  if (guardianTechRes.status === 'fulfilled' && guardianTechRes.value.ok) {
+    const text = await guardianTechRes.value.text();
+    globalNews.push(...parseRssFeed(text, 'The Guardian Tech', 'GT', 6));
   }
 
-  if (idRes.status === 'fulfilled' && idRes.value.ok) {
-    const text = await idRes.value.text();
-    indonesiaNews = parseRssFeed(text, 18);
+  // Parse Indonesia Feeds
+  if (cnbcIdRes.status === 'fulfilled' && cnbcIdRes.value.ok) {
+    const text = await cnbcIdRes.value.text();
+    indonesiaNews.push(...parseRssFeed(text, 'CNBC Indonesia', 'ID_CNBC_', 8));
+  }
+
+  if (antaraIdRes.status === 'fulfilled' && antaraIdRes.value.ok) {
+    const text = await antaraIdRes.value.text();
+    indonesiaNews.push(...parseRssFeed(text, 'Antara News', 'ID_ANTARA_', 8));
   }
 
   return { globalNews, indonesiaNews };
