@@ -83,10 +83,13 @@ export default {
               ⚡ Live Generated (${content.facts.length} items)
             </span>
           </div>
-          <div style="display: flex; gap: 10px;">
+          <div style="display: flex; gap: 10px; align-items: center;">
             <a href="/preview?t=${randomToken}" style="background: #238636; color: #ffffff; text-decoration: none; padding: 6px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.3);">
               🔄 Generate New Facts
             </a>
+            <button id="preview-send-btn" onclick="sendNewsletterFromPreview()" style="background: #1f6feb; color: #ffffff; border: none; cursor: pointer; padding: 6px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+              🚀 Send Newsletter Now
+            </button>
             <a href="/history" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">
               🗄️ Topic History
             </a>
@@ -94,7 +97,28 @@ export default {
               ← Dashboard
             </a>
           </div>
-        </div>`;
+        </div>
+        <script>
+          async function sendNewsletterFromPreview() {
+            const btn = document.getElementById('preview-send-btn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Sending...';
+            try {
+              const res = await fetch('/send', { method: 'POST' });
+              const data = await res.json();
+              if (data.success) {
+                alert('✓ Newsletter sent successfully to subscribers!');
+              } else {
+                alert('✗ Failed to send: ' + (data.error || JSON.stringify(data)));
+              }
+            } catch (err) {
+              alert('✗ Error sending newsletter: ' + err.message);
+            } finally {
+              btn.disabled = false;
+              btn.textContent = '🚀 Send Newsletter Now';
+            }
+          }
+        </script>`;
 
         html = html.replace('<body', '<body style="margin:0;padding:0;"');
         html = html.replace(/(<body[^>]*>)/i, `$1${toolbar}`);
