@@ -18,9 +18,9 @@ export default {
     ctx.waitUntil(
       (async () => {
         try {
-          console.log('[InToday Cron] Fetching live news and daily content...');
+          console.log('[InToday Cron] Fetching daily fun facts and glossary...');
           const content = await fetchDailyContent(env);
-          console.log(`[InToday Cron] Generated ${content.globalNews.length} global news, ${content.indonesiaNews.length} ID news, ${content.facts.length} facts, and ${content.glossary.length} glossary terms.`);
+          console.log(`[InToday Cron] Generated ${content.facts.length} facts and ${content.glossary.length} glossary terms.`);
 
           // Update cache
           const todayKey = new Date().toISOString().split('T')[0];
@@ -80,8 +80,6 @@ export default {
         let html = renderNewsletterHtml({
           date: todayKey,
           formattedDate,
-          globalNews: content.globalNews,
-          indonesiaNews: content.indonesiaNews,
           facts: content.facts,
           glossary: content.glossary
         });

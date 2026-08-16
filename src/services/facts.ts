@@ -1,5 +1,4 @@
-import { Env, FactItem, GlossaryItem, NewsItem, NewsSentiment } from '../types';
-import { fetchLiveRssFeeds, RawNewsItem } from './news';
+import { Env, FactItem, GlossaryItem } from '../types';
 
 interface OrcaChatResponse {
   id?: string;
@@ -14,24 +13,100 @@ interface OrcaChatResponse {
 }
 
 export interface GeneratedContent {
-  globalNews: NewsItem[];
-  indonesiaNews: NewsItem[];
   facts: FactItem[];
   glossary: GlossaryItem[];
 }
 
+const TOPIC_SEEDS = [
+  'space phenomena, quirky monetary policy, ancient animal trials, optical illusions',
+  'deep-sea biology, hidden costs of free products, weird municipal laws, memory tricks',
+  'human anatomy quirks, the economics of everyday items, bizarre medieval trials, decision-making biases',
+  'animal intelligence, game theory in daily life, copyright peculiarities, the psychology of habits',
+  'meteorology mysteries, pricing psychology, landmark courtroom oddities, cognitive dissonance',
+  'food chemistry secrets, supply chain anomalies, unusual international laws, social conformity experiments'
+];
+
 /**
- * Executes a call to OrcaRouter with a clean JSON output mandate and timeout.
+ * Fetches fresh, mind-blowing daily facts across General, Economics, Law, and Psychology.
  */
-async function callOrca(
-  baseUrl: string,
-  apiKey: string,
-  model: string,
-  prompt: string,
-  timeoutMs = 45000
-): Promise<string> {
+export async function fetchDailyContent(env: Env): Promise<GeneratedContent> {
+  const apiKey = env.ORCAROUTER_API_KEY;
+  if (!apiKey) {
+    console.warn('ORCAROUTER_API_KEY is not set. Using curated fallback content.');
+    return getCuratedContentFallback();
+  }
+
+  const baseUrl = (env.ORCAROUTER_BASE_URL || 'https://api.orcarouter.ai/v1').replace(/\/+$/, '');
+  const model = env.ORCAROUTER_MODEL || 'deepseek/deepseek-v4-flash-free';
+
+  // Pick a random seed focus to guarantee fresh facts on every generation
+  const randomSeed = TOPIC_SEEDS[Math.floor(Math.random() * TOPIC_SEEDS.length)];
+  const timestamp = Date.now();
+
+  const userPrompt = `You are the chief curator for "InToday", a daily newsletter designed to make the reader the most interesting, informed, and conversation-ready person in the room.
+
+TASK:
+Generate 4 BRAND NEW, mind-blowing, fun facts for junior high and high school students (easy to digest, zero dry jargon).
+Focus inspiration for today (${timestamp}): ${randomSeed}.
+
+The 4 categories MUST be:
+1. "general" (Anything & Everything - nature, space, biology, technology)
+2. "economics" (Surprising market behaviors, hidden costs, quirky trade rules)
+3. "law" (Fascinating historical or modern laws, unusual courtroom cases)
+4. "psychology" (Counter-intuitive brain quirks, optical or social behavior experiments)
+
+For each fact provide:
+- "title": Catchy, intriguing title
+- "fact": 1 punchy sentence stating the core mind-blowing fact
+- "explanation": 2 simple sentences explaining why/how it works in plain English
+- "example": 1 relatable real-world scenario or practical case
+
+Also provide a "glossary" of 2-3 technical or interesting words introduced in these facts with simple 1-sentence definitions.
+
+Return valid JSON ONLY matching this schema:
+{
+  "facts": [
+    {
+      "category": "general",
+      "title": "Title",
+      "fact": "Core fact.",
+      "explanation": "Simple explanation.",
+      "example": "Relatable case."
+    },
+    {
+      "category": "economics",
+      "title": "Title",
+      "fact": "Core fact.",
+      "explanation": "Simple explanation.",
+      "example": "Relatable case."
+    },
+    {
+      "category": "law",
+      "title": "Title",
+      "fact": "Core fact.",
+      "explanation": "Simple explanation.",
+      "example": "Relatable case."
+    },
+    {
+      "category": "psychology",
+      "title": "Title",
+      "fact": "Core fact.",
+      "explanation": "Simple explanation.",
+      "example": "Relatable case."
+    }
+  ],
+  "glossary": [
+    {
+      "term": "Word",
+      "definition": "Simple definition."
+    }
+  ]
+}
+
+Output raw JSON only. Do not wrap in markdown or reasoning.`;
+
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutId = setTimeout(() => controller.abort(), 40000);
 
   try {
     const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -42,66 +117,50 @@ async function callOrca(
       },
       body: JSON.stringify({
         model: model,
-        messages: [{ role: 'user', content: prompt }],
+        messages: [
+          { role: 'system', content: 'You are a JSON assistant. Output strictly valid JSON immediately. No reasoning, no markdown wrappers, no commentary.' },
+          { role: 'user', content: userPrompt }
+        ],
         temperature: 0.75,
-        max_tokens: 3000
+        max_tokens: 2200
       }),
       signal: controller.signal
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OrcaRouter error (${response.status}): ${errorText}`);
+      const errText = await response.text();
+      console.error(`OrcaRouter error (${response.status}): ${errText}`);
+      throw new Error(`OrcaRouter API returned ${response.status}`);
     }
 
     const result = (await response.json()) as OrcaChatResponse;
     const content = result.choices?.[0]?.message?.content;
-    if (!content) throw new Error('Empty response from model');
-    return content;
+
+    if (!content) {
+      throw new Error('Empty AI response received');
+    }
+
+    return parseFactsContent(content);
+  } catch (err: any) {
+    console.error('[Facts Service] Detailed AI Generation Error:', err);
+    return getCuratedContentFallback();
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
-/**
- * Generates 4 fresh, unique fun facts + glossary in parallel (~4s)
- */
-async function generateFreshFactsAndGlossary(
-  baseUrl: string,
-  apiKey: string,
-  model: string
-): Promise<{ facts: FactItem[]; glossary: GlossaryItem[] }> {
-  const prompt = `You are the chief curator for "InToday" daily newsletter.
-Generate 4 UNIQUE, brand new, mind-blowing fun facts for junior high/high school students across:
-1. "general" (Anything & Everything - biology, space, unusual nature)
-2. "economics" (Surprising market phenomena, quirky trade rules, invisible costs)
-3. "law" (Fascinating historical or weird modern laws, unusual legal cases)
-4. "psychology" (Counter-intuitive human behavior, brain quirks, optical or social effects)
+function parseFactsContent(content: string): GeneratedContent {
+  let cleanJson = content.trim();
+  if (cleanJson.startsWith('```')) {
+    cleanJson = cleanJson.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+  }
 
-For each fact:
-- "title": Catchy title
-- "fact": 1 punchy sentence core fact
-- "explanation": 2 simple sentences explaining why/how in plain English
-- "example": 1 relatable real-world case or scenario
-
-Also provide a "glossary" of 2-3 new vocabulary words introduced in these facts with simple definitions.
-
-Output valid JSON ONLY with this format:
-{
-  "facts": [
-    { "category": "general", "title": "...", "fact": "...", "explanation": "...", "example": "..." },
-    { "category": "economics", "title": "...", "fact": "...", "explanation": "...", "example": "..." },
-    { "category": "law", "title": "...", "fact": "...", "explanation": "...", "example": "..." },
-    { "category": "psychology", "title": "...", "fact": "...", "explanation": "...", "example": "..." }
-  ],
-  "glossary": [
-    { "term": "Word", "definition": "1 simple sentence definition." }
-  ]
-}`;
-
-  const rawJson = await callOrca(baseUrl, apiKey, model, prompt, 35000);
-  let clean = rawJson.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
-  const parsed = JSON.parse(clean);
+  let parsed: any;
+  try {
+    parsed = JSON.parse(cleanJson);
+  } catch (err) {
+    throw new Error(`Failed to parse AI facts JSON: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
   const categoryMap: Record<string, { label: string; emoji: string }> = {
     general: { label: 'Anything & Everything', emoji: '🌍' },
@@ -116,6 +175,7 @@ Output valid JSON ONLY with this format:
   for (const cat of ['general', 'economics', 'law', 'psychology'] as const) {
     const item = factsList.find((p: any) => p.category?.toLowerCase() === cat) || factsList.shift();
     const meta = categoryMap[cat];
+
     facts.push({
       category: cat,
       categoryLabel: meta.label,
@@ -132,260 +192,21 @@ Output valid JSON ONLY with this format:
     definition: g.definition || 'A key term introduced in today\'s newsletter.'
   }));
 
+  if (glossary.length === 0) {
+    glossary.push({
+      term: 'Petrichor',
+      definition: 'The pleasant, earthy smell produced when rain falls on dry ground or rocks.'
+    });
+  }
+
   return { facts, glossary };
 }
 
 /**
- * Curates 6 global news and 6 indonesia news from live RSS items in parallel (~6s)
- */
-async function curateLiveNewsItems(
-  baseUrl: string,
-  apiKey: string,
-  model: string,
-  liveRss: { globalNews: RawNewsItem[]; indonesiaNews: RawNewsItem[] }
-): Promise<{ globalNews: NewsItem[]; indonesiaNews: NewsItem[] }> {
-  const globalPrompt = liveRss.globalNews.map(n => `[${n.id}] [${n.source}] ${n.title}\nURL: ${n.link}`).join('\n\n');
-  const idPrompt = liveRss.indonesiaNews.map(n => `[${n.id}] [${n.source}] ${n.title}\nURL: ${n.link}`).join('\n\n');
-
-  const prompt = `You are the InToday news curator.
-Select exactly 6 stories from GLOBAL and 6 from INDONESIA from the real verified articles below.
-Categorize each into:
-- 2 "good" (uplifting progress, wins, breakthroughs)
-- 2 "bad" (critical challenges, crises, hard realities)
-- 2 "wdyt" (controversial, thought-provoking topics that spark debate)
-
-For each story provide:
-- "id": Exact article ID from list below (e.g. "GW1", "ID_CNBC_1")
-- "title": Clean, catchy headline
-- "summary": 2 simple sentences in plain English
-- "takeaway": 1-2 simple sentences explaining "How this affects you"
-- "sentiment": Exactly "good", "bad", or "wdyt"
-- "url": The exact article URL from the list below
-
-GLOBAL ARTICLES:
-${globalPrompt}
-
-INDONESIA ARTICLES:
-${idPrompt}
-
-Output raw JSON only matching:
-{
-  "globalNews": [
-    { "id": "GW1", "title": "...", "summary": "...", "takeaway": "...", "sentiment": "good", "source": "The Guardian", "url": "..." }
-  ],
-  "indonesiaNews": [
-    { "id": "ID_CNBC_1", "title": "...", "summary": "...", "takeaway": "...", "sentiment": "good", "source": "CNBC Indonesia", "url": "..." }
-  ]
-}`;
-
-  const rawJson = await callOrca(baseUrl, apiKey, model, prompt, 35000);
-  let clean = rawJson.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
-  const parsed = JSON.parse(clean);
-
-  const normalizeSentiment = (s: string): NewsSentiment => {
-    const lower = (s || '').toLowerCase();
-    if (lower.includes('good')) return 'good';
-    if (lower.includes('bad')) return 'bad';
-    return 'wdyt';
-  };
-
-  const resolveItem = (item: any, list: RawNewsItem[], fallbackIdx: number): NewsItem => {
-    const idMatch = list.find(r => r.id === item.id || `[${r.id}]` === item.id);
-    const urlMatch = list.find(r => r.link === item.url);
-    const matched = idMatch || urlMatch || list[fallbackIdx] || list[0];
-
-    return {
-      title: item.title || matched.title,
-      summary: item.summary || 'Important developments happening today.',
-      takeaway: item.takeaway || 'Stay informed about shifting trends and everyday impacts.',
-      sentiment: normalizeSentiment(item.sentiment),
-      source: matched.source,
-      url: matched.link
-    };
-  };
-
-  const globalNews: NewsItem[] = (parsed.globalNews || []).slice(0, 6).map((item: any, i: number) =>
-    resolveItem(item, liveRss.globalNews, i)
-  );
-
-  const indonesiaNews: NewsItem[] = (parsed.indonesiaNews || []).slice(0, 6).map((item: any, i: number) =>
-    resolveItem(item, liveRss.indonesiaNews, i)
-  );
-
-  return { globalNews, indonesiaNews };
-}
-
-/**
- * Main entry point: Fetches live RSS and calls facts & news in parallel.
- */
-export async function fetchDailyContent(env: Env): Promise<GeneratedContent> {
-  const apiKey = env.ORCAROUTER_API_KEY;
-  if (!apiKey) {
-    console.warn('ORCAROUTER_API_KEY is not set. Using verified fallback content.');
-    return getCuratedContentFallback();
-  }
-
-  const baseUrl = (env.ORCAROUTER_BASE_URL || 'https://api.orcarouter.ai/v1').replace(/\/+$/, '');
-  const model = env.ORCAROUTER_MODEL || 'deepseek/deepseek-v4-flash-free';
-
-  // 1. Fetch live RSS feeds
-  let liveRss = { globalNews: [] as RawNewsItem[], indonesiaNews: [] as RawNewsItem[] };
-  try {
-    liveRss = await fetchLiveRssFeeds();
-  } catch (err) {
-    console.warn('RSS fetch error, continuing with fallback articles:', err);
-  }
-
-  // Ensure minimum items
-  if (liveRss.globalNews.length === 0) liveRss.globalNews = getFallbackRawGlobal();
-  if (liveRss.indonesiaNews.length === 0) liveRss.indonesiaNews = getFallbackRawIndonesia();
-
-  try {
-    // Run facts generation and news curation concurrently in parallel!
-    const [factsResult, newsResult] = await Promise.all([
-      generateFreshFactsAndGlossary(baseUrl, apiKey, model),
-      curateLiveNewsItems(baseUrl, apiKey, model, liveRss)
-    ]);
-
-    return {
-      facts: factsResult.facts,
-      glossary: factsResult.glossary,
-      globalNews: newsResult.globalNews,
-      indonesiaNews: newsResult.indonesiaNews
-    };
-  } catch (err: any) {
-    console.warn('Parallel AI generation error, falling back gracefully:', err?.message || err);
-    return getCuratedContentFallback();
-  }
-}
-
-function getFallbackRawGlobal(): RawNewsItem[] {
-  return [
-    { id: 'GW1', title: 'Zimbabwe boat accident death toll hits 68', link: 'https://www.theguardian.com/world/2026/aug/15/more-bodies-recovered-after-zimbabwe-boat-accident', source: 'The Guardian' },
-    { id: 'GW2', title: 'Electric vehicle battery breakthrough doubles range', link: 'https://www.theguardian.com/technology/electric-vehicles', source: 'The Guardian Tech' },
-    { id: 'GW3', title: 'European nations debate classroom smartphone restrictions', link: 'https://www.theguardian.com/education', source: 'The Guardian' },
-    { id: 'GW4', title: 'Cyberattack targets international logistical networks', link: 'https://www.theguardian.com/technology/data-computer-security', source: 'The Guardian Tech' },
-    { id: 'GW5', title: 'Solar panel deployment reaches all-time summer highs', link: 'https://www.theguardian.com/environment/renewable-energy', source: 'The Guardian' },
-    { id: 'GW6', title: 'Autonomous convenience stores spread across Asian capitals', link: 'https://www.theguardian.com/technology/artificialintelligenceai', source: 'The Guardian Tech' }
-  ];
-}
-
-function getFallbackRawIndonesia(): RawNewsItem[] {
-  return [
-    { id: 'ID1', title: 'Pemerintah Bakal Gratiskan SHM, Ini Syaratnya', link: 'https://www.cnbcindonesia.com/news/20260816154923-4-759813/pemerintah-bakal-gratiskan-shm-ini-syaratnya', source: 'CNBC Indonesia' },
-    { id: 'ID2', title: 'Timnas voli putra Indonesia bertanding di Samdech Thipadei Cup', link: 'https://www.antaranews.com/berita/5697561/timnas-voli-putra-indonesia-bertanding-di-samdech-thipadei-cup', source: 'Antara News' },
-    { id: 'ID3', title: 'Garis pantai sepanjang 12 km terdampak tumpahan minyak', link: 'https://www.antaranews.com/berita/5697563/garis-pantai-sepanjang-12-km-di-oman-terdampak-tumpahan-minyak', source: 'Antara News' },
-    { id: 'ID4', title: 'BNI Salurkan Bantuan bagi Masyarakat Terdampak Gempa NTT', link: 'https://www.cnbcindonesia.com/news/20260816213327-4-759860/bni-salurkan-bantuan-bagi-masyarakat-terdampak-gempa-ntt', source: 'CNBC Indonesia' },
-    { id: 'ID5', title: 'Evaluasi insentif fiskal kendaraan listrik di kota besar', link: 'https://www.cnbcindonesia.com/news/20260816154923-4-759813/pemerintah-bakal-gratiskan-shm-ini-syaratnya', source: 'CNBC Indonesia' },
-    { id: 'ID6', title: 'Satgas percepat penanganan rehabilitasi gempa daerah', link: 'https://www.antaranews.com/berita/5697559/satgas-dpr-kawal-percepatan-penanganan-korban-gempa-ntt', source: 'Antara News' }
-  ];
-}
-
-/**
- * Curated fallback content with verified, active, deep article permalinks
+ * Curated backup facts if internet or API is offline
  */
 export function getCuratedContentFallback(): GeneratedContent {
   return {
-    globalNews: [
-      {
-        title: 'Scientists Accidentally Discovered How to Turn Plastic Into Real Diamonds',
-        summary: 'Researchers in Germany used high-powered lasers to blast everyday PET plastic, replicating planetary pressures and creating microscopic diamonds for tech chips.',
-        takeaway: 'In the near future, recycling everyday plastic waste could help manufacture ultra-durable medical lasers and quantum computers cheaply.',
-        sentiment: 'good',
-        source: 'The Guardian Tech',
-        url: 'https://www.theguardian.com/technology/electric-vehicles'
-      },
-      {
-        title: 'Global Renewable Energy Reaches Record Investment Output',
-        summary: 'Global capital investment in solar, wind, and battery storage officially eclipsed fossil fuel spending for the first time across major world economies.',
-        takeaway: 'Lower renewable hardware costs mean greener electricity, less air pollution, and cheaper long-term utility bills for households.',
-        sentiment: 'good',
-        source: 'The Guardian',
-        url: 'https://www.theguardian.com/world/2026/aug/15/more-bodies-recovered-after-zimbabwe-boat-accident'
-      },
-      {
-        title: 'Extreme Weather in West Africa Triggers Global Agricultural Shortages',
-        summary: 'Severe drought and unseasonal heavy rains damaged agricultural yields across major export nations, sending commodities prices soaring worldwide.',
-        takeaway: 'Expect price increases at grocery stores for cocoa, coffee beans, and imported baked goods over the coming months.',
-        sentiment: 'bad',
-        source: 'The Guardian',
-        url: 'https://www.theguardian.com/world/2026/aug/15/more-bodies-recovered-after-zimbabwe-boat-accident'
-      },
-      {
-        title: 'International Cyberattacks Disrupt Critical Supply Chains and Logistics',
-        summary: 'Sophisticated ransomware syndicates targeted global shipping hubs and hospitals, causing freight delays and highlighting digital infrastructure vulnerabilities.',
-        takeaway: 'Always enable two-factor authentication and update your devices to stay protected against widespread credential stuffing scams.',
-        sentiment: 'bad',
-        source: 'The Guardian Tech',
-        url: 'https://www.theguardian.com/technology/data-computer-security'
-      },
-      {
-        title: 'European Nations Debate Banning Smartphones in Classrooms for Under-16s',
-        summary: 'Lawmakers proposed complete school phone bans to improve student focus and mental health, sparking fierce resistance from tech groups and digital educators.',
-        takeaway: 'Does removing digital devices protect attention spans, or does it isolate students from learning necessary modern digital skills?',
-        sentiment: 'wdyt',
-        source: 'The Guardian',
-        url: 'https://www.theguardian.com/education'
-      },
-      {
-        title: 'Autonomous AI Stores Proliferate Across Cities with Zero Human Cashiers',
-        summary: 'Major retail chains are rapidly replacing checkout staff with facial biometric scanners that charge customer credit cards automatically upon exit.',
-        takeaway: 'While it eliminates all checkout lines, critics worry about corporate facial recognition databases and the loss of entry-level jobs.',
-        sentiment: 'wdyt',
-        source: 'The Guardian Tech',
-        url: 'https://www.theguardian.com/technology/artificialintelligenceai'
-      }
-    ],
-    indonesiaNews: [
-      {
-        title: 'Pemerintah Bakal Gratiskan SHM Tanah bagi Masyarakat',
-        summary: 'Kementerian PKP menyiapkan program sertifikasi tanah tanpa biaya bagi masyarakat berpenghasilan rendah untuk memberikan kepastian hukum aset tempat tinggal.',
-        takeaway: 'Membantu warga memiliki sertifikat tanah resmi tanpa biaya notaris mahal, sekaligus melindungi aset keluarga dari sengketa.',
-        sentiment: 'good',
-        source: 'CNBC Indonesia',
-        url: 'https://www.cnbcindonesia.com/news/20260816154923-4-759813/pemerintah-bakal-gratiskan-shm-ini-syaratnya'
-      },
-      {
-        title: 'Timnas Voli Putra Indonesia Bertanding di Turnamen Samdech Thipadei Cup',
-        summary: 'Skuad tim nasional voli putra Indonesia resmi memulai perjuangan di turnamen bergengsi Asia Tenggara menyusul rentetan prestasi positif di level regional.',
-        takeaway: 'Prestasi atlet nasional di kancah internasional membuktikan peningkatan pembinaan bakat olahraga muda Indonesia.',
-        sentiment: 'good',
-        source: 'Antara News',
-        url: 'https://www.antaranews.com/berita/5697561/timnas-voli-putra-indonesia-bertanding-di-samdech-thipadei-cup'
-      },
-      {
-        title: 'Garis Pantai Sepanjang 12 Km Terdampak Tumpahan Minyak Mentah',
-        summary: 'Otoritas maritim dan lingkungan hidup menangani dampak tumpahan minyak mentah yang mencemari kawasan pesisir dan mengancam biota laut setempat.',
-        takeaway: 'Pencemaran laut berdampak langsung pada pasokan ikan segar dan mata pencaharian nelayan pesisir.',
-        sentiment: 'bad',
-        source: 'Antara News',
-        url: 'https://www.antaranews.com/berita/5697563/garis-pantai-sepanjang-12-km-di-oman-terdampak-tumpahan-minyak'
-      },
-      {
-        title: 'Penyaluran Bantuan Kemanusiaan bagi Masyarakat Terdampak Bencana Gempa',
-        summary: 'Tim tanggap darurat dan perbankan BUMN mempercepat pengiriman logistik serta layanan medis bagi ribuan warga yang mengungsi akibat gempa.',
-        takeaway: 'Mengingatkan kita untuk selalu memahami prosedur mitigasi keselamatan gempa di tempat tinggal masing-masing.',
-        sentiment: 'bad',
-        source: 'CNBC Indonesia',
-        url: 'https://www.cnbcindonesia.com/news/20260816213327-4-759860/bni-salurkan-bantuan-bagi-masyarakat-terdampak-gempa-ntt'
-      },
-      {
-        title: 'Evaluasi Skema Subsidi Pembelian Kendaraan Listrik dan Efektivitas Anggaran',
-        summary: 'Pemerintah dan pengamat ekonomi memperdebatkan apakah insentif pajak kendaraan listrik harus dilanjutkan atau dialihkan untuk subsidi transportasi umum massal.',
-        takeaway: 'Apakah subsidi miliaran rupiah sebaiknya untuk kendaraan pribadi listrik, atau untuk memperbanyak bus dan kereta komuter umum?',
-        sentiment: 'wdyt',
-        source: 'CNBC Indonesia',
-        url: 'https://www.cnbcindonesia.com/news/20260816154923-4-759813/pemerintah-bakal-gratiskan-shm-ini-syaratnya'
-      },
-      {
-        title: 'Pengawasan Ruang Publik Digital dan Penindakan Kejahatan Finansial Siber',
-        summary: 'Satgas penegakan hukum siber meningkatkan patroli terhadap rekening perantara penipuan daring yang memanfaatkan celah registrasi identitas instan.',
-        takeaway: 'Pengetatan keamanan perbankan membuat transaksi lebih terlindungi, namun proses verifikasi identitas menjadi lebih berlapis.',
-        sentiment: 'wdyt',
-        source: 'Antara News',
-        url: 'https://www.antaranews.com/berita/5697559/satgas-dpr-kawal-percepatan-penanganan-korban-gempa-ntt'
-      }
-    ],
     facts: [
       {
         category: 'general',

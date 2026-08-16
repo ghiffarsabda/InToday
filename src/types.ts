@@ -13,24 +13,11 @@ export interface GlossaryItem {
   definition: string;
 }
 
-export type NewsSentiment = 'good' | 'bad' | 'wdyt';
-
-export interface NewsItem {
-  title: string;
-  summary: string;
-  takeaway: string; // "How this affects you"
-  sentiment: NewsSentiment;
-  source: string;
-  url?: string;
-}
-
 export interface NewsletterData {
   date: string;
   formattedDate: string;
   facts: FactItem[];
   glossary: GlossaryItem[];
-  indonesiaNews: NewsItem[];
-  globalNews: NewsItem[];
 }
 
 export interface Env {
