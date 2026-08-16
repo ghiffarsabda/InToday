@@ -58,6 +58,34 @@ export default {
     const path = url.pathname;
     const todayKey = new Date().toISOString().split('T')[0];
 
+    // Security Verification (Active if ADMIN_KEY secret is configured)
+    if (!checkAuth(request, env)) {
+      if (path.startsWith('/api/') || (path === '/send' && request.method === 'POST')) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Unauthorized. Provide valid Authorization header, X-Admin-Key, or ?key=<ADMIN_KEY>.' }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (path === '/login' && request.method === 'POST') {
+        try {
+          const formData = await request.formData();
+          const key = formData.get('key');
+          if (key === env.ADMIN_KEY) {
+            return new Response(null, {
+              status: 302,
+              headers: {
+                'Location': '/',
+                'Set-Cookie': `intoday_admin=${key}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`
+              }
+            });
+          }
+        } catch (_) {}
+      }
+
+      return renderLoginHtml();
+    }
+
     // 1. Email HTML Preview (Forces fresh live AI generation)
     if (path === '/preview') {
       try {
@@ -898,3 +926,134 @@ export default {
     return new Response('Not Found', { status: 404 });
   }
 };
+
+function checkAuth(request: Request, env: Env): boolean {
+  if (!env.ADMIN_KEY || env.ADMIN_KEY.trim() === '') {
+    return true; // Open access when ADMIN_KEY is not set
+  }
+
+  const url = new URL(request.url);
+  const keyParam = url.searchParams.get('key') || url.searchParams.get('admin_key');
+  if (keyParam && keyParam === env.ADMIN_KEY) return true;
+
+  const authHeader = request.headers.get('Authorization');
+  if (authHeader) {
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    if (token === env.ADMIN_KEY) return true;
+  }
+
+  const customHeader = request.headers.get('X-Admin-Key');
+  if (customHeader && customHeader === env.ADMIN_KEY) return true;
+
+  const cookie = request.headers.get('Cookie');
+  if (cookie && cookie.includes(`intoday_admin=${env.ADMIN_KEY}`)) return true;
+
+  return false;
+}
+
+function renderLoginHtml(): Response {
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InToday · Access Verification</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --text-bright: #f0f6fc;
+      --text-muted: #8b949e;
+      --accent: #238636;
+      --link: #58a6ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .login-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 32px;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-bright);
+      margin: 0 0 8px 0;
+    }
+    .desc {
+      color: var(--text-muted);
+      font-size: 13px;
+      margin-bottom: 24px;
+    }
+    .form-group { margin-bottom: 20px; }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-bright);
+      margin-bottom: 6px;
+    }
+    input {
+      width: 100%;
+      padding: 10px 14px;
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+    input:focus { border-color: var(--link); }
+    button {
+      width: 100%;
+      padding: 10px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #2ea043; }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <h1>🔒 InToday Security Gate</h1>
+    <div class="desc">Enter your secret ADMIN_KEY to access this console.</div>
+    <form method="POST" action="/login">
+      <div class="form-group">
+        <label for="key">Admin Secret Key</label>
+        <input type="password" id="key" name="key" placeholder="Enter ADMIN_KEY" required autofocus />
+      </div>
+      <button type="submit">Verify & Access</button>
+    </form>
+  </div>
+</body>
+</html>`;
+
+  return new Response(html, {
+    status: 401,
+    headers: { 'Content-Type': 'text/html; charset=utf-8' }
+  });
+}

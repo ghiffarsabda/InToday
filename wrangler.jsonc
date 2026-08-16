@@ -10,14 +10,14 @@
   },
   "triggers": {
     "crons": [
-      "0 8 * * *"
+      "0 23 * * *"
     ]
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "intoday-db",
-      "database_id": "intoday-db"
+      "database_id": "4748ff1d-bb3e-4133-8a0a-8a7fe7ce1710"
     }
   ],
   "vars": {

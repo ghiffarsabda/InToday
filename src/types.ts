@@ -49,4 +49,5 @@ export interface Env {
   ORCAROUTER_BASE_URL?: string;
   OPENROUTER_MODEL?: string;
   ORCAROUTER_MODEL?: string;
+  ADMIN_KEY?: string;
 }
