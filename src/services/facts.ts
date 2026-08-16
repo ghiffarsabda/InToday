@@ -1,7 +1,7 @@
 import { Env, FactCategory, FactItem, GlossaryItem } from '../types';
 import { getRecentTopics, saveGeneratedFacts, HistoryRecord } from './db';
 
-interface OrcaChatResponse {
+interface ChatResponse {
   id?: string;
   choices?: Array<{
     message?: {
@@ -9,7 +9,7 @@ interface OrcaChatResponse {
     };
   }>;
   error?: {
-    code?: string;
+    code?: string | number;
     message?: string;
   };
 }
@@ -29,31 +29,57 @@ export const CATEGORY_DEFINITIONS: Record<FactCategory, { label: string; emoji: 
   health: { label: 'Health & Body', emoji: '🩺', actionLabel: '⚡ Actionable step for today:' }
 };
 
+interface ProviderTarget {
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  extraHeaders?: Record<string, string>;
+}
+
 // In-memory fallback tracking when running without D1
 const inMemoryHistory: Array<{ category: string; title: string; fact: string }> = [];
 
-const FREE_MODELS = [
-  'orcarouter/free',
-  'deepseek/deepseek-v4-flash-free',
-  'qwen/qwen3.8-27b-free',
-  'deepseek/deepseek-v4-pro-free'
-];
-
 /**
- * Strictly generates fresh, live AI content while checking the SQLite history database
+ * Generates fresh, live AI content while checking the SQLite history database
  * to guarantee that no previous topic is ever repeated.
+ * Gracefully paces requests between OpenRouter Free and OrcaRouter Free.
  */
-export async function fetchDailyContent(env: Env, maxRetries = 3): Promise<GeneratedContent> {
-  const apiKey = env.ORCAROUTER_API_KEY;
-  if (!apiKey) {
-    throw new Error('ORCAROUTER_API_KEY is missing in worker environment. Cannot generate live content.');
-  }
-
-  const baseUrl = (env.ORCAROUTER_BASE_URL || 'https://api.orcarouter.ai/v1').replace(/\/+$/, '');
-  const primaryModel = env.ORCAROUTER_MODEL || 'orcarouter/free';
+export async function fetchDailyContent(env: Env): Promise<GeneratedContent> {
   const todayKey = new Date().toISOString().split('T')[0];
 
-  // 1. Fetch recent topic history from SQLite D1 database (or memory)
+  // 1. Configure Providers (OpenRouter Free & OrcaRouter Free)
+  const targets: ProviderTarget[] = [];
+
+  if (env.OPENROUTER_API_KEY) {
+    const openrouterUrl = (env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
+    targets.push({
+      name: 'OpenRouter (openrouter/free)',
+      baseUrl: openrouterUrl,
+      apiKey: env.OPENROUTER_API_KEY,
+      model: env.OPENROUTER_MODEL || 'openrouter/free',
+      extraHeaders: {
+        'HTTP-Referer': 'https://intoday.app',
+        'X-Title': 'InToday'
+      }
+    });
+  }
+
+  if (env.ORCAROUTER_API_KEY) {
+    const orcaUrl = (env.ORCAROUTER_BASE_URL || 'https://api.orcarouter.ai/v1').replace(/\/+$/, '');
+    targets.push({
+      name: 'OrcaRouter (orcarouter/free)',
+      baseUrl: orcaUrl,
+      apiKey: env.ORCAROUTER_API_KEY,
+      model: env.ORCAROUTER_MODEL || 'orcarouter/free'
+    });
+  }
+
+  if (targets.length === 0) {
+    throw new Error('No AI provider API key found (OPENROUTER_API_KEY or ORCAROUTER_API_KEY).');
+  }
+
+  // 2. Fetch recent topic history from SQLite D1 database (or memory)
   let pastTopics: Array<{ category: string; title: string; fact: string }> = [];
   try {
     const dbRecords = await getRecentTopics(env.DB, 50);
@@ -64,22 +90,17 @@ export async function fetchDailyContent(env: Env, maxRetries = 3): Promise<Gener
 
   let pastTopicsPrompt = '';
   if (pastTopics.length > 0) {
-    const lines = pastTopics.slice(0, 40).map(t => `- [${t.category}] ${t.title}`);
+    const lines = pastTopics.slice(0, 25).map(t => `- [${t.category}] ${t.title}`);
     pastTopicsPrompt = `\n\nALREADY DISCUSSED TOPICS IN DATABASE (CRITICAL: DO NOT REPEAT ANY OF THESE TOPICS OR THEMES):\n${lines.join('\n')}\n`;
   }
 
-  const modelsToTry = [primaryModel, ...FREE_MODELS.filter(m => m !== primaryModel)];
-  let lastError: Error | null = null;
+  const timestamp = `${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const currentModel = modelsToTry[(attempt - 1) % modelsToTry.length];
-    const timestamp = `${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
-    const userPrompt = `You are the chief editor of "InToday", a daily newsletter for modern readers and students.
+  const userPrompt = `You are the chief editor of "InToday", a daily newsletter for modern readers and students.
 Task (${timestamp}): Generate 7 BRAND-NEW, NEVER-BEFORE-SEEN insights across human knowledge.
 ${pastTopicsPrompt}
 Generate EXACTLY 1 item for each of the 7 categories:
-1. "science" - Science (a fascinating natural/physics/astronomy discovery + relatable real-world example)
+1. "science" - Science (a natural/physics/astronomy discovery + relatable real-world example)
 2. "economics" - Economics (a surprising market quirk/behavioral economics concept + real-world example)
 3. "law" - Law & Governance (a landmark legal oddity or unusual court history + real-world example)
 4. "psychology" - Psychology (a counter-intuitive mental bias or human behavior quirk + real-world example)
@@ -114,40 +135,48 @@ Return valid JSON ONLY matching this structure:
 
 Output raw JSON only.`;
 
+  let lastError: Error | null = null;
+
+  // 3. Graceful request routing with patient timeouts and generous token buffer
+  for (let i = 0; i < targets.length; i++) {
+    const target = targets[i];
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    const timeoutId = setTimeout(() => controller.abort(), 90000);
 
     try {
-      console.log(`[OrcaRouter] Attempt ${attempt}/${maxRetries} using model '${currentModel}' with database check (${pastTopics.length} excluded past topics)...`);
+      console.log(`[AI Router] Querying ${target.name} (patient mode)...`);
 
-      const response = await fetch(`${baseUrl}/chat/completions`, {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${target.apiKey}`,
+        ...(target.extraHeaders || {})
+      };
+
+      const response = await fetch(`${target.baseUrl}/chat/completions`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`
-        },
+        headers,
         body: JSON.stringify({
-          model: currentModel,
+          model: target.model,
           messages: [
-            { role: 'system', content: 'You are a JSON assistant. Output strictly valid JSON with all 7 categories immediately. No reasoning, no markdown wrappers, no commentary.' },
+            { role: 'system', content: 'You are a JSON assistant. Output strictly valid JSON with all 7 categories immediately. Keep explanations crisp to avoid truncation. No reasoning, no markdown wrappers.' },
             { role: 'user', content: userPrompt }
           ],
           temperature: 0.7,
-          max_tokens: 2200
+          max_tokens: 3800
         }),
         signal: controller.signal
       });
 
       if (!response.ok) {
         const errText = await response.text();
-        throw new Error(`OrcaRouter HTTP ${response.status} (${currentModel}): ${errText}`);
+        throw new Error(`HTTP ${response.status}: ${errText}`);
       }
 
-      const result = (await response.json()) as OrcaChatResponse;
+      const result = (await response.json()) as ChatResponse;
       const content = result.choices?.[0]?.message?.content;
 
       if (!content) {
-        throw new Error(`OrcaRouter (${currentModel}) returned empty completion.`);
+        throw new Error('Returned empty completion.');
       }
 
       const parsed = parseFactsContent(content);
@@ -164,21 +193,21 @@ Output raw JSON only.`;
         inMemoryHistory.unshift({ category: f.category, title: f.title, fact: f.fact });
       });
 
-      console.log(`[OrcaRouter] Succeeded! Stored ${parsed.facts.length} fresh facts into database history.`);
+      console.log(`[AI Router] ✓ Success with ${target.name}! Stored ${parsed.facts.length} fresh facts into database.`);
       return parsed;
     } catch (err: any) {
       lastError = err;
-      console.warn(`[OrcaRouter] Attempt ${attempt} failed:`, err?.message || err);
-      if (attempt < maxRetries) {
-        // Linear backoff
-        await new Promise(r => setTimeout(r, 2000 * attempt));
+      console.warn(`[AI Router] ${target.name} failed:`, err?.message || err);
+      if (i < targets.length - 1) {
+        console.log(`[AI Router] Waiting 5s before checking next provider...`);
+        await new Promise(r => setTimeout(r, 5000));
       }
     } finally {
       clearTimeout(timeoutId);
     }
   }
 
-  throw new Error(`Live AI generation failed after ${maxRetries} attempts. Last error: ${lastError?.message || 'Unknown error'}`);
+  throw new Error(`All AI routing targets failed. Last error: ${lastError?.message || 'Unknown error'}`);
 }
 
 function parseFactsContent(content: string): GeneratedContent {
@@ -191,7 +220,18 @@ function parseFactsContent(content: string): GeneratedContent {
   try {
     parsed = JSON.parse(cleanJson);
   } catch (err) {
-    throw new Error(`Failed to parse AI facts JSON: ${err instanceof Error ? err.message : String(err)}`);
+    // Attempt automatic cleanup of trailing unclosed braces/quotes
+    try {
+      const lastBrace = cleanJson.lastIndexOf('}');
+      if (lastBrace !== -1) {
+        const truncated = cleanJson.substring(0, lastBrace + 1);
+        parsed = JSON.parse(truncated);
+      } else {
+        throw err;
+      }
+    } catch (inner) {
+      throw new Error(`Failed to parse AI facts JSON: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   const allCategories: FactCategory[] = [
@@ -204,7 +244,7 @@ function parseFactsContent(content: string): GeneratedContent {
     'health'
   ];
 
-  const factsList = parsed.facts || [];
+  const factsList = parsed.facts || parsed.fun_facts || [];
   if (factsList.length === 0) {
     throw new Error('AI returned an empty facts array.');
   }

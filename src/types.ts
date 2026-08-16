@@ -35,11 +35,14 @@ export interface Env {
   DB?: D1Database;
 
   // Secrets
-  ORCAROUTER_API_KEY: string;
+  ORCAROUTER_API_KEY?: string;
+  OPENROUTER_API_KEY?: string;
   RESEND_API_KEY: string;
 
   // Environment variables
   FROM_EMAIL?: string;
   ORCAROUTER_BASE_URL?: string;
+  OPENROUTER_BASE_URL?: string;
   ORCAROUTER_MODEL?: string;
+  OPENROUTER_MODEL?: string;
 }
