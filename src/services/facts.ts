@@ -1,5 +1,6 @@
 import { Env, FactCategory, FactItem, GlossaryItem } from '../types';
-import { getRecentTopics, saveGeneratedFacts, HistoryRecord } from './db';
+import { getRecentTopics, saveGeneratedFacts } from './db';
+import { generateContentWithGemini } from './gemini';
 
 interface ChatResponse {
   id?: string;
@@ -29,63 +30,63 @@ export const CATEGORY_DEFINITIONS: Record<FactCategory, { label: string; emoji: 
   health: { label: 'Health & Body', emoji: '🩺', actionLabel: '⚡ Actionable step for today:' }
 };
 
-interface ProviderTarget {
-  name: string;
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-  extraHeaders?: Record<string, string>;
-}
-
-// In-memory fallback tracking when running without D1
-const inMemoryHistory: Array<{ category: string; title: string; fact: string }> = [];
-
 /**
- * Generates fresh, live AI content while checking the SQLite history database
- * to guarantee that no previous topic is ever repeated.
- * Gracefully paces requests between OpenRouter Free and OrcaRouter Free.
+ * Generates fresh daily facts.
+ * Prioritizes Google Gemini directly.
+ * If Gemini is not configured or errors, fails over gracefully to OpenRouter/OrcaRouter.
  */
 export async function fetchDailyContent(env: Env): Promise<GeneratedContent> {
+  // 1. Primary: Google Gemini
+  if (env.GEMINI_API_KEY) {
+    try {
+      console.log('[AI Pipeline] Dispatching generation to Google Gemini...');
+      return await generateContentWithGemini(env);
+    } catch (geminiErr: any) {
+      console.warn('[AI Pipeline] Google Gemini call failed:', geminiErr?.message || geminiErr);
+      if (!env.OPENROUTER_API_KEY && !env.ORCAROUTER_API_KEY) {
+        throw geminiErr;
+      }
+      console.log('[AI Pipeline] Failing over to secondary router...');
+    }
+  }
+
+  // 2. Secondary: OpenRouter / OrcaRouter
+  return await fetchWithOpenRouterOrOrca(env);
+}
+
+async function fetchWithOpenRouterOrOrca(env: Env): Promise<GeneratedContent> {
   const todayKey = new Date().toISOString().split('T')[0];
 
-  // 1. Configure Providers (OpenRouter Free & OrcaRouter Free)
-  const targets: ProviderTarget[] = [];
+  const targets: Array<{ name: string; baseUrl: string; apiKey: string; model: string; extraHeaders?: Record<string, string> }> = [];
 
   if (env.OPENROUTER_API_KEY) {
-    const openrouterUrl = (env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
     targets.push({
       name: 'OpenRouter (openrouter/free)',
-      baseUrl: openrouterUrl,
+      baseUrl: (env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/+$/, ''),
       apiKey: env.OPENROUTER_API_KEY,
       model: env.OPENROUTER_MODEL || 'openrouter/free',
-      extraHeaders: {
-        'HTTP-Referer': 'https://intoday.app',
-        'X-Title': 'InToday'
-      }
+      extraHeaders: { 'HTTP-Referer': 'https://intoday.app', 'X-Title': 'InToday' }
     });
   }
 
   if (env.ORCAROUTER_API_KEY) {
-    const orcaUrl = (env.ORCAROUTER_BASE_URL || 'https://api.orcarouter.ai/v1').replace(/\/+$/, '');
     targets.push({
       name: 'OrcaRouter (orcarouter/free)',
-      baseUrl: orcaUrl,
+      baseUrl: (env.ORCAROUTER_BASE_URL || 'https://api.orcarouter.ai/v1').replace(/\/+$/, ''),
       apiKey: env.ORCAROUTER_API_KEY,
       model: env.ORCAROUTER_MODEL || 'orcarouter/free'
     });
   }
 
   if (targets.length === 0) {
-    throw new Error('No AI provider API key found (OPENROUTER_API_KEY or ORCAROUTER_API_KEY).');
+    throw new Error('No AI provider API keys configured in environment.');
   }
 
-  // 2. Fetch recent topic history from SQLite D1 database (or memory)
   let pastTopics: Array<{ category: string; title: string; fact: string }> = [];
   try {
-    const dbRecords = await getRecentTopics(env.DB, 50);
-    pastTopics = dbRecords.length > 0 ? dbRecords : inMemoryHistory;
+    pastTopics = await getRecentTopics(env.DB, 50);
   } catch (e) {
-    pastTopics = inMemoryHistory;
+    // Proceed without history if DB is empty
   }
 
   let pastTopicsPrompt = '';
@@ -137,14 +138,13 @@ Output raw JSON only.`;
 
   let lastError: Error | null = null;
 
-  // 3. Graceful request routing with patient timeouts and generous token buffer
   for (let i = 0; i < targets.length; i++) {
     const target = targets[i];
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 90000);
 
     try {
-      console.log(`[AI Router] Querying ${target.name} (patient mode)...`);
+      console.log(`[AI Router] Querying ${target.name}...`);
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -158,7 +158,7 @@ Output raw JSON only.`;
         body: JSON.stringify({
           model: target.model,
           messages: [
-            { role: 'system', content: 'You are a JSON assistant. Output strictly valid JSON with all 7 categories immediately. Keep explanations crisp to avoid truncation. No reasoning, no markdown wrappers.' },
+            { role: 'system', content: 'You are a JSON assistant. Output strictly valid JSON with all 7 categories immediately. Keep explanations crisp. No reasoning, no markdown wrappers.' },
             { role: 'user', content: userPrompt }
           ],
           temperature: 0.7,
@@ -179,19 +179,12 @@ Output raw JSON only.`;
         throw new Error('Returned empty completion.');
       }
 
-      const parsed = parseFactsContent(content);
-
-      // Save new facts into SQLite database history
+      const parsed = parseOpenAiCompatibleContent(content);
       try {
         await saveGeneratedFacts(env.DB, parsed.facts, todayKey);
       } catch (dbErr) {
-        console.warn('[DB] Could not save to D1, appending to memory cache:', dbErr);
+        console.warn('[DB] Could not save to D1:', dbErr);
       }
-
-      // Also append to in-memory history tracker
-      parsed.facts.forEach(f => {
-        inMemoryHistory.unshift({ category: f.category, title: f.title, fact: f.fact });
-      });
 
       console.log(`[AI Router] ✓ Success with ${target.name}! Stored ${parsed.facts.length} fresh facts into database.`);
       return parsed;
@@ -199,21 +192,19 @@ Output raw JSON only.`;
       lastError = err;
       console.warn(`[AI Router] ${target.name} failed:`, err?.message || err);
       if (i < targets.length - 1) {
-        console.log(`[AI Router] Waiting 5s before checking next provider...`);
-        await new Promise(r => setTimeout(r, 5000));
+        await new Promise(r => setTimeout(r, 4000));
       }
     } finally {
       clearTimeout(timeoutId);
     }
   }
 
-  throw new Error(`All AI routing targets failed. Last error: ${lastError?.message || 'Unknown error'}`);
+  throw new Error(`All AI fallback targets failed. Last error: ${lastError?.message || 'Unknown error'}`);
 }
 
-function parseFactsContent(content: string): GeneratedContent {
+function parseOpenAiCompatibleContent(content: string): GeneratedContent {
   let cleanJson = content.trim();
 
-  // Extract JSON payload between the first '{' and the last '}'
   const firstBrace = cleanJson.indexOf('{');
   const lastBrace = cleanJson.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
@@ -226,7 +217,6 @@ function parseFactsContent(content: string): GeneratedContent {
   try {
     parsed = JSON.parse(cleanJson);
   } catch (err) {
-    // Attempt automatic cleanup of trailing unclosed braces/quotes
     try {
       const lastSafeBrace = cleanJson.lastIndexOf('}');
       if (lastSafeBrace !== -1) {

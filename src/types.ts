@@ -34,15 +34,19 @@ export interface Env {
   // Cloudflare D1 SQLite Database
   DB?: D1Database;
 
-  // Secrets
-  ORCAROUTER_API_KEY?: string;
+  // Primary Google Gemini API
+  GEMINI_API_KEY?: string;
+  GEMINI_MODEL?: string;
+
+  // Backup / Legacy Keys
   OPENROUTER_API_KEY?: string;
+  ORCAROUTER_API_KEY?: string;
   RESEND_API_KEY: string;
 
   // Environment variables
   FROM_EMAIL?: string;
-  ORCAROUTER_BASE_URL?: string;
   OPENROUTER_BASE_URL?: string;
-  ORCAROUTER_MODEL?: string;
+  ORCAROUTER_BASE_URL?: string;
   OPENROUTER_MODEL?: string;
+  ORCAROUTER_MODEL?: string;
 }
