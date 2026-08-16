@@ -13,9 +13,18 @@ export interface GlossaryItem {
   definition: string;
 }
 
+export interface NewsItem {
+  title: string;
+  summary: string;
+  source: string;
+  url?: string;
+}
+
 export interface NewsletterData {
   date: string;
   formattedDate: string;
+  globalNews: NewsItem[];
+  indonesiaNews: NewsItem[];
   facts: FactItem[];
   glossary: GlossaryItem[];
 }

@@ -37,6 +37,8 @@ export async function sendDailyNewsletter(
   const newsletterData: NewsletterData = {
     date: date.toISOString().split('T')[0],
     formattedDate,
+    globalNews: content.globalNews,
+    indonesiaNews: content.indonesiaNews,
     facts: content.facts,
     glossary: content.glossary
   };

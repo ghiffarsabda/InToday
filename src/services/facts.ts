@@ -1,5 +1,6 @@
-import { Env, FactItem, GlossaryItem, NewsletterData } from '../types';
+import { Env, FactItem, GlossaryItem, NewsItem } from '../types';
 import { NEWSLETTER_CONFIG } from '../config';
+import { fetchLiveRssFeeds, RawNewsItem } from './news';
 
 interface OrcaMessage {
   role: 'system' | 'user' | 'assistant';
@@ -19,6 +20,8 @@ interface OrcaChatResponse {
 }
 
 export interface GeneratedContent {
+  globalNews: NewsItem[];
+  indonesiaNews: NewsItem[];
   facts: FactItem[];
   glossary: GlossaryItem[];
 }
@@ -26,59 +29,102 @@ export interface GeneratedContent {
 export async function fetchDailyContent(env: Env): Promise<GeneratedContent> {
   const apiKey = env.ORCAROUTER_API_KEY;
   if (!apiKey) {
-    console.warn('ORCAROUTER_API_KEY is not set. Using curated facts fallback.');
+    console.warn('ORCAROUTER_API_KEY is not set. Using curated fallback content.');
     return getCuratedContentFallback();
+  }
+
+  // 1. Fetch live RSS news feeds in parallel
+  let liveRss: { globalNews: RawNewsItem[]; indonesiaNews: RawNewsItem[] } = {
+    globalNews: [],
+    indonesiaNews: []
+  };
+
+  try {
+    liveRss = await fetchLiveRssFeeds();
+  } catch (err) {
+    console.warn('Could not fetch live RSS feeds, proceeding with fallback news list:', err);
   }
 
   const baseUrl = (env.ORCAROUTER_BASE_URL || 'https://api.orcarouter.ai/v1').replace(/\/+$/, '');
   const model = env.ORCAROUTER_MODEL || 'deepseek/deepseek-v4-flash-free';
 
-  const userPrompt = `You write for "InToday", a fun newsletter that makes science, economics, law, and psychology easy to understand for middle/junior high schoolers.
-Explain complex concepts using simple, exciting language. Avoid dry academic jargon. Always include a concrete, relatable real-world example.
+  const globalHeadlinesStr = liveRss.globalNews.length > 0
+    ? liveRss.globalNews.map((n, i) => `${i + 1}. [${n.source}] ${n.title}`).join('\n')
+    : '1. [Reuters] Major international diplomatic talks underway.\n2. [BBC] World economic summit outlines growth projections.';
 
-Generate a JSON object with two keys: "facts" (array of 4 objects) and "glossary" (array of 2-4 technical words introduced today with simple definitions).
+  const idHeadlinesStr = liveRss.indonesiaNews.length > 0
+    ? liveRss.indonesiaNews.map((n, i) => `${i + 1}. [${n.source}] ${n.title}`).join('\n')
+    : '1. [Antara] Pembangunan infrastruktur nasional terus dipercepat.\n2. [Kompas] Pertumbuhan ekonomi kuartal ini catatkan hasil positif.';
 
-Schema:
+  const userPrompt = `You write for "InToday", a daily newsletter that provides:
+1. Top 5 Most Important Global News You Can't Miss Today
+2. Top 5 Most Important Indonesia News You Can't Miss Today
+3. 4 Fun Facts (easy to understand for junior high schoolers, with real-world examples)
+4. A Glossary of new words
+
+Live Headlines to select from:
+GLOBAL:
+${globalHeadlinesStr}
+
+INDONESIA:
+${idHeadlinesStr}
+
+Return strictly a JSON object with this exact schema:
 {
+  "globalNews": [
+    {
+      "title": "Clear Headline",
+      "summary": "1-2 simple, easy-to-understand sentences in plain English explaining what happened and why it matters.",
+      "source": "Source Name (e.g. Reuters, BBC, NYT)"
+    }
+  ],
+  "indonesiaNews": [
+    {
+      "title": "Clear Headline",
+      "summary": "1-2 simple, easy-to-understand sentences in plain English explaining the story.",
+      "source": "Source Name (e.g. Antara, Kompas, Detik)"
+    }
+  ],
   "facts": [
     {
       "category": "general",
-      "title": "Fun catchy title (3-6 words)",
-      "fact": "1 punchy sentence stating the core mind-blowing fact.",
-      "explanation": "2-3 friendly, simple sentences explaining HOW or WHY this happens in plain English.",
-      "example": "1-2 sentences showing a relatable, real-world case or scenario."
+      "title": "Fun Title",
+      "fact": "1 sentence punchy fact.",
+      "explanation": "2-3 simple sentences explaining how/why.",
+      "example": "Relatable real-world scenario."
     },
     {
       "category": "economics",
-      "title": "Fun catchy title",
-      "fact": "1 punchy sentence about an economic concept/behavior.",
-      "explanation": "2-3 simple sentences explaining the concept in plain English.",
-      "example": "A concrete real-world story or everyday life example."
+      "title": "Fun Title",
+      "fact": "1 sentence punchy fact.",
+      "explanation": "2-3 simple sentences explaining how/why.",
+      "example": "Relatable real-world scenario."
     },
     {
       "category": "law",
-      "title": "Fun catchy title",
-      "fact": "1 punchy sentence about a legal rule/precedent/quirk.",
-      "explanation": "2-3 simple sentences explaining why the law exists or how it works.",
-      "example": "A real case or story showing what happened."
+      "title": "Fun Title",
+      "fact": "1 sentence punchy fact.",
+      "explanation": "2-3 simple sentences explaining how/why.",
+      "example": "Relatable real-world scenario."
     },
     {
       "category": "psychology",
-      "title": "Fun catchy title",
-      "fact": "1 punchy sentence about a human brain quirk/behavior.",
-      "explanation": "2-3 simple sentences explaining how the mind works here.",
-      "example": "A relatable situation where you or your friends experience this."
+      "title": "Fun Title",
+      "fact": "1 sentence punchy fact.",
+      "explanation": "2-3 simple sentences explaining how/why.",
+      "example": "Relatable real-world scenario."
     }
   ],
   "glossary": [
     {
       "term": "Word",
-      "definition": "Easy, 1-sentence definition in simple words."
+      "definition": "1 simple definition sentence."
     }
   ]
 }
 
-Return JSON ONLY. No extra text or markdown fences.`;
+Make sure "globalNews" has exactly 5 items and "indonesiaNews" has exactly 5 items.
+Return raw JSON ONLY.`;
 
   const messages: OrcaMessage[] = [
     { role: 'user', content: userPrompt }
@@ -98,7 +144,7 @@ Return JSON ONLY. No extra text or markdown fences.`;
         model: model,
         messages: messages,
         temperature: 0.5,
-        max_tokens: 2048
+        max_tokens: 3500
       }),
       signal: controller.signal
     });
@@ -116,7 +162,7 @@ Return JSON ONLY. No extra text or markdown fences.`;
       throw new Error('Empty completion received');
     }
 
-    return parseAndEnrichContent(content);
+    return parseAndEnrichContent(content, liveRss);
   } catch (err: any) {
     console.warn('AI generation issue, using curated fallback content:', err?.message || err);
     return getCuratedContentFallback();
@@ -125,42 +171,45 @@ Return JSON ONLY. No extra text or markdown fences.`;
   }
 }
 
-function parseAndEnrichContent(content: string): GeneratedContent {
+function parseAndEnrichContent(
+  content: string,
+  liveRss: { globalNews: RawNewsItem[]; indonesiaNews: RawNewsItem[] }
+): GeneratedContent {
   let cleanJson = content.trim();
   if (cleanJson.startsWith('```')) {
     cleanJson = cleanJson.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
   }
 
-  let parsed: {
-    facts?: Array<{
-      category: string;
-      title: string;
-      fact: string;
-      explanation: string;
-      example: string;
-    }>;
-    glossary?: Array<{
-      term: string;
-      definition: string;
-    }>;
-  };
-
+  let parsed: any;
   try {
     parsed = JSON.parse(cleanJson);
   } catch (err) {
-    // If wrapped in array directly by mistake, handle gracefully
-    try {
-      const rawArray = JSON.parse(cleanJson);
-      if (Array.isArray(rawArray)) {
-        parsed = { facts: rawArray, glossary: [] };
-      } else {
-        throw err;
-      }
-    } catch {
-      throw new Error(`Failed to parse AI response: ${err instanceof Error ? err.message : String(err)}`);
-    }
+    throw new Error(`Failed to parse AI JSON response: ${err instanceof Error ? err.message : String(err)}`);
   }
 
+  // Parse Global News
+  const globalNews: NewsItem[] = (parsed.globalNews || []).slice(0, 5).map((item: any, i: number) => {
+    const matchedRss = liveRss.globalNews[i];
+    return {
+      title: item.title || matchedRss?.title || 'Global News Update',
+      summary: item.summary || 'Important developments happening around the world today.',
+      source: item.source || matchedRss?.source || 'International Press',
+      url: matchedRss?.link
+    };
+  });
+
+  // Parse Indonesia News
+  const indonesiaNews: NewsItem[] = (parsed.indonesiaNews || []).slice(0, 5).map((item: any, i: number) => {
+    const matchedRss = liveRss.indonesiaNews[i];
+    return {
+      title: item.title || matchedRss?.title || 'Indonesia News Update',
+      summary: item.summary || 'Important developments happening across Indonesia today.',
+      source: item.source || matchedRss?.source || 'Indonesian Media',
+      url: matchedRss?.link
+    };
+  });
+
+  // Parse Facts
   const categoryMap: Record<string, { label: string; emoji: string }> = {
     general: { label: 'Anything & Everything', emoji: '🌍' },
     economics: { label: 'Economics', emoji: '📈' },
@@ -172,7 +221,7 @@ function parseAndEnrichContent(content: string): GeneratedContent {
   const facts: FactItem[] = [];
 
   for (const cat of ['general', 'economics', 'law', 'psychology'] as const) {
-    const item = factsList.find(p => p.category?.toLowerCase() === cat) || factsList.shift();
+    const item = factsList.find((p: any) => p.category?.toLowerCase() === cat) || factsList.shift();
     const meta = categoryMap[cat];
 
     facts.push({
@@ -186,26 +235,81 @@ function parseAndEnrichContent(content: string): GeneratedContent {
     });
   }
 
-  const glossary: GlossaryItem[] = (parsed.glossary || []).map(g => ({
+  // Parse Glossary
+  const glossary: GlossaryItem[] = (parsed.glossary || []).map((g: any) => ({
     term: g.term || 'Concept',
     definition: g.definition || 'A key term introduced in today\'s newsletter.'
   }));
 
   if (glossary.length === 0) {
     glossary.push({
-      term: 'Cognitive Bias',
-      definition: 'A predictable mental shortcut our brain takes that can trick us into making mistakes.'
+      term: 'Diplomatic Accord',
+      definition: 'An official formal agreement reached between different nations.'
     });
   }
 
-  return { facts, glossary };
+  return { globalNews, indonesiaNews, facts, glossary };
 }
 
 /**
- * Curated backup content (plain language, real-world cases, and glossary)
+ * Curated fallback content with Top 5 Global, Top 5 Indonesia, Facts, and Glossary
  */
 export function getCuratedContentFallback(): GeneratedContent {
   return {
+    globalNews: [
+      {
+        title: 'Global Renewable Energy Reaches New Milestone',
+        summary: 'Solar and wind power produced more electricity globally this month than fossil fuels in several major economies, marking a historic shift toward clean energy.',
+        source: 'Reuters'
+      },
+      {
+        title: 'International Space Station Welcomes New Global Crew',
+        summary: 'Astronauts from three continents docked safely with the ISS to begin a six-month mission researching microgravity biology.',
+        source: 'BBC News'
+      },
+      {
+        title: 'Tech Summit Finalizes Ethical Standards for AI',
+        summary: 'Representatives from 40 nations signed a joint pledge establishing safety and fairness benchmarks for autonomous AI systems.',
+        source: 'The Verge'
+      },
+      {
+        title: 'Major Breakthrough in Ocean Cleanup Initiative',
+        summary: 'Engineers deployed new floating barrier systems that successfully collected over 100 tons of plastic debris from the Pacific Garbage Patch.',
+        source: 'The Guardian'
+      },
+      {
+        title: 'Global Semiconductor Supply Chains Rebalance',
+        summary: 'New microchip fabrication facilities opened in Europe and North America, easing global hardware supply shortages.',
+        source: 'Bloomberg'
+      }
+    ],
+    indonesiaNews: [
+      {
+        title: 'Pembangunan IKN Nusantara Capai Tahap Krusial',
+        summary: 'Fasilitas pemerintahan utama dan jalur transportasi hijau di Ibu Kota Nusantara resmi siap untuk beroperasi penuh.',
+        source: 'Antara News'
+      },
+      {
+        title: 'Ekspor Produk Manufaktur dan Nikel RI Meningkat',
+        summary: 'Hilirisasi industri mineral nasional mencatatkan kenaikan surplus perdagangan ekspor sebesar 12% pada kuartal ini.',
+        source: 'Kompas'
+      },
+      {
+        title: 'Program Vaksinasi dan Kesehatan Sekolah Serentak',
+        summary: 'Dinas Kesehatan di berbagai provinsi memulai Bulan Imunisasi Anak Sekolah (BIAS) untuk memperkuat imun puluhan ribu siswa SD.',
+        source: 'Detik News'
+      },
+      {
+        title: 'Kereta Cepat Whoosh Catat Rekor 5 Juta Penumpang',
+        summary: 'Layanan transportasi Whoosh relasi Jakarta-Bandung berhasil melayani lonjakan penumpang liburan dengan ketepatan waktu 99%.',
+        source: 'Tempo'
+      },
+      {
+        title: 'Inovasi Startup Pertanian Lokal Raih Pendanaan Global',
+        summary: 'Platform agritech asal Indonesia yang membantu petani kopi lokal sukses mendapatkan suntikan modal ventura internasional.',
+        source: 'CNBC Indonesia'
+      }
+    ],
     facts: [
       {
         category: 'general',

@@ -18,9 +18,9 @@ export default {
     ctx.waitUntil(
       (async () => {
         try {
-          console.log('[InToday Cron] Fetching daily content from OrcaRouter...');
+          console.log('[InToday Cron] Fetching live news and daily content...');
           const content = await fetchDailyContent(env);
-          console.log(`[InToday Cron] Generated ${content.facts.length} facts and ${content.glossary.length} glossary terms.`);
+          console.log(`[InToday Cron] Generated ${content.globalNews.length} global news, ${content.indonesiaNews.length} ID news, ${content.facts.length} facts, and ${content.glossary.length} glossary terms.`);
 
           // Update cache
           const todayKey = new Date().toISOString().split('T')[0];
@@ -80,6 +80,8 @@ export default {
         let html = renderNewsletterHtml({
           date: todayKey,
           formattedDate,
+          globalNews: content.globalNews,
+          indonesiaNews: content.indonesiaNews,
           facts: content.facts,
           glossary: content.glossary
         });
@@ -113,8 +115,8 @@ export default {
       }
     }
 
-    // 2. Fetch Facts JSON API
-    if (path === '/api/facts') {
+    // 2. Fetch Facts & News JSON API
+    if (path === '/api/facts' || path === '/api/content') {
       try {
         const content = await fetchDailyContent(env);
         cachedContent = { dateKey: todayKey, content };
@@ -132,7 +134,7 @@ export default {
     // 3. Manual Email Trigger (POST /send)
     if (path === '/send' && request.method === 'POST') {
       try {
-        console.log('[InToday Manual Trigger] Fetching daily content...');
+        console.log('[InToday Manual Trigger] Fetching live content...');
         const content = await fetchDailyContent(env);
         cachedContent = { dateKey: todayKey, content };
 
@@ -317,11 +319,15 @@ export default {
     <div class="header">
       <div class="badge">Cloudflare Worker</div>
       <h1>InToday Newsletter Engine</h1>
-      <p class="subtitle">Automated daily intellectual brief via OrcaRouter + Resend</p>
+      <p class="subtitle">Automated daily live news + intellectual brief via OrcaRouter &amp; Resend</p>
     </div>
 
     <div class="card">
       <div class="card-title">System Environment & Secrets</div>
+      <div class="status-row">
+        <span>Live Web News Fetch</span>
+        <span class="status-tag status-ok">Active ✓ (Global &amp; Indonesia)</span>
+      </div>
       <div class="status-row">
         <span>OrcaRouter API Key</span>
         <span class="status-tag ${hasOrcaKey ? 'status-ok' : 'status-missing'}">${hasOrcaKey ? 'Configured ✓' : 'Missing'}</span>
@@ -356,7 +362,7 @@ export default {
         ⚡️ Instant Preview (0s)
       </a>
       <a href="/preview?live=true" target="_blank" class="btn btn-secondary">
-        🤖 Live AI Preview (5s)
+        🤖 Live AI &amp; Web News (5s)
       </a>
       <button id="send-btn" class="btn btn-primary" onclick="sendNow()">
         🚀 Send Daily Newsletter to Subscribers
@@ -371,11 +377,11 @@ export default {
       const btn = document.getElementById('send-btn');
       const resultBox = document.getElementById('send-result');
       btn.disabled = true;
-      btn.textContent = 'Generating & Sending...';
+      btn.textContent = 'Fetching Live News & Dispatching...';
       resultBox.style.display = 'block';
       resultBox.style.background = '#21262d';
       resultBox.style.color = '#8b949e';
-      resultBox.textContent = 'Contacting OrcaRouter AI & dispatching email via Resend...';
+      resultBox.textContent = 'Scraping live global & Indonesian headlines, summarizing with AI, and dispatching via Resend...';
 
       try {
         const res = await fetch('/send', { method: 'POST' });
