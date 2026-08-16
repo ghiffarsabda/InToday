@@ -14,8 +14,8 @@ export interface FactItem {
   title: string;
   fact: string;
   explanation: string;
-  actionOrExampleLabel?: string; // "💡 Real-world case:", "✨ Faith in Action:", "⚡ Do this today:"
-  example: string; // The action or example text
+  actionOrExampleLabel?: string;
+  example: string;
 }
 
 export interface GlossaryItem {
@@ -31,6 +31,9 @@ export interface NewsletterData {
 }
 
 export interface Env {
+  // Cloudflare D1 SQLite Database
+  DB?: D1Database;
+
   // Secrets
   ORCAROUTER_API_KEY: string;
   RESEND_API_KEY: string;

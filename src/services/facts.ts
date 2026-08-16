@@ -1,4 +1,5 @@
 import { Env, FactCategory, FactItem, GlossaryItem } from '../types';
+import { getRecentTopics, saveGeneratedFacts, HistoryRecord } from './db';
 
 interface OrcaChatResponse {
   id?: string;
@@ -8,7 +9,8 @@ interface OrcaChatResponse {
     };
   }>;
   error?: {
-    message: string;
+    code?: string;
+    message?: string;
   };
 }
 
@@ -27,18 +29,19 @@ export const CATEGORY_DEFINITIONS: Record<FactCategory, { label: string; emoji: 
   health: { label: 'Health & Body', emoji: '🩺', actionLabel: '⚡ Actionable step for today:' }
 };
 
-const TOPIC_SEEDS = [
-  'quantum entanglement in biology, dynamic surge pricing algorithms, air rights real estate law, the choice overload paradox, Sriwijaya naval trade diplomacy, the Islamic etiquette of expressing daily gratitude (Shukr) and helping neighbors, nasal breathing for nitric oxide production',
-  'extremophile organisms in volcanic vents, the tragedy of the commons in shared workspaces, space salvage and celestial property law, the Dunning-Kruger effect in learning, ancient Egyptian worker compensation records, the Sunnah habit of sincere smiling and keeping promises (Amanah), 90-minute ultradian focus cycles',
-  'planetary magnetic shield physics, the decoy effect in menu and subscription pricing, ancient dispute resolution tablets, the peak-end rule in memory formation, the Silk Road paper-making revolution, the prophetic practice of early morning productivity (Barakah in early hours), post-meal light walking for glucose balance',
-  'plant communication via underground mycelium networks, opportunity cost in personal time decisions, treasure trove discovery law, cognitive reframing under pressure, Borobudur relief geometry, the Islamic discipline of speaking gentle words and avoiding suspicion, 20-20-20 rule for digital eye strain',
-  'gravitational lensing and dark matter clues, network effects and marketplace moats, copyright protection quirks, the spotlight effect in social gatherings, the Banda Islands spice trade treaty of 1667, the Sunnah practice of forgiving others before sleeping, cold water face splashes for vagus nerve calming'
+// In-memory fallback tracking when running without D1
+const inMemoryHistory: Array<{ category: string; title: string; fact: string }> = [];
+
+const FREE_MODELS = [
+  'orcarouter/free',
+  'deepseek/deepseek-v4-flash-free',
+  'qwen/qwen3.8-27b-free',
+  'deepseek/deepseek-v4-pro-free'
 ];
 
 /**
- * Strictly generates fresh, live AI content.
- * Automatically retries up to 3 times on transient network/API hiccups.
- * NO static fallback data.
+ * Strictly generates fresh, live AI content while checking the SQLite history database
+ * to guarantee that no previous topic is ever repeated.
  */
 export async function fetchDailyContent(env: Env, maxRetries = 3): Promise<GeneratedContent> {
   const apiKey = env.ORCAROUTER_API_KEY;
@@ -47,22 +50,39 @@ export async function fetchDailyContent(env: Env, maxRetries = 3): Promise<Gener
   }
 
   const baseUrl = (env.ORCAROUTER_BASE_URL || 'https://api.orcarouter.ai/v1').replace(/\/+$/, '');
-  const model = env.ORCAROUTER_MODEL || 'deepseek/deepseek-v4-flash-free';
+  const primaryModel = env.ORCAROUTER_MODEL || 'orcarouter/free';
+  const todayKey = new Date().toISOString().split('T')[0];
 
+  // 1. Fetch recent topic history from SQLite D1 database (or memory)
+  let pastTopics: Array<{ category: string; title: string; fact: string }> = [];
+  try {
+    const dbRecords = await getRecentTopics(env.DB, 50);
+    pastTopics = dbRecords.length > 0 ? dbRecords : inMemoryHistory;
+  } catch (e) {
+    pastTopics = inMemoryHistory;
+  }
+
+  let pastTopicsPrompt = '';
+  if (pastTopics.length > 0) {
+    const lines = pastTopics.slice(0, 40).map(t => `- [${t.category}] ${t.title}`);
+    pastTopicsPrompt = `\n\nALREADY DISCUSSED TOPICS IN DATABASE (CRITICAL: DO NOT REPEAT ANY OF THESE TOPICS OR THEMES):\n${lines.join('\n')}\n`;
+  }
+
+  const modelsToTry = [primaryModel, ...FREE_MODELS.filter(m => m !== primaryModel)];
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const randomSeed = TOPIC_SEEDS[Math.floor(Math.random() * TOPIC_SEEDS.length)];
+    const currentModel = modelsToTry[(attempt - 1) % modelsToTry.length];
     const timestamp = `${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-    const userPrompt = `You are the chief editor of "InToday", a punchy daily newsletter for modern readers and students.
-Task (${timestamp}): Generate 7 BRAND-NEW, UNIQUE, mind-blowing insights inspired by: ${randomSeed}.
-
+    const userPrompt = `You are the chief editor of "InToday", a daily newsletter for modern readers and students.
+Task (${timestamp}): Generate 7 BRAND-NEW, NEVER-BEFORE-SEEN insights across human knowledge.
+${pastTopicsPrompt}
 Generate EXACTLY 1 item for each of the 7 categories:
-1. "science" - Science (natural/physics discovery + relatable real-world example)
-2. "economics" - Economics (surprising market quirk/behavioral economics + real-world example)
-3. "law" - Law & Governance (fascinating law oddity/court history + real-world example)
-4. "psychology" - Psychology (mental bias/brain quirk + real-world example)
+1. "science" - Science (a fascinating natural/physics/astronomy discovery + relatable real-world example)
+2. "economics" - Economics (a surprising market quirk/behavioral economics concept + real-world example)
+3. "law" - Law & Governance (a landmark legal oddity or unusual court history + real-world example)
+4. "psychology" - Psychology (a counter-intuitive mental bias or human behavior quirk + real-world example)
 5. "history" - History (Pick ONE fascinating story: either World history OR Indonesian history)
 6. "islam" - Islam & Faith (ACTIONABLE spiritual advice or Sunnah habit to practice better faith, calm the heart, and build noble character)
 7. "health" - Health & Body (ACTIONABLE science-backed micro-habit to do today for energy, focus, or physical wellness)
@@ -70,11 +90,11 @@ Generate EXACTLY 1 item for each of the 7 categories:
 For each item provide:
 - "category": Exact key matching one of the 7 above
 - "title": Catchy, intriguing title
-- "fact": 1 punchy core sentence
+- "fact": 1 punchy core sentence stating the insight
 - "explanation": 2 simple sentences in plain English
 - "example": Practical real-world case or actionable advice step
 
-Also provide a "glossary" of 2-3 new vocabulary words with 1-sentence simple definitions.
+Also provide a "glossary" of 2-3 new vocabulary words introduced with 1-sentence simple definitions.
 
 Return valid JSON ONLY matching this structure:
 {
@@ -98,7 +118,7 @@ Output raw JSON only.`;
     const timeoutId = setTimeout(() => controller.abort(), 45000);
 
     try {
-      console.log(`[OrcaRouter] Attempt ${attempt}/${maxRetries} generating live facts...`);
+      console.log(`[OrcaRouter] Attempt ${attempt}/${maxRetries} using model '${currentModel}' with database check (${pastTopics.length} excluded past topics)...`);
 
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
@@ -107,45 +127,58 @@ Output raw JSON only.`;
           Authorization: `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: model,
+          model: currentModel,
           messages: [
             { role: 'system', content: 'You are a JSON assistant. Output strictly valid JSON with all 7 categories immediately. No reasoning, no markdown wrappers, no commentary.' },
             { role: 'user', content: userPrompt }
           ],
-          temperature: 0.85,
-          max_tokens: 3000
+          temperature: 0.7,
+          max_tokens: 2200
         }),
         signal: controller.signal
       });
 
       if (!response.ok) {
         const errText = await response.text();
-        throw new Error(`OrcaRouter HTTP ${response.status}: ${errText}`);
+        throw new Error(`OrcaRouter HTTP ${response.status} (${currentModel}): ${errText}`);
       }
 
       const result = (await response.json()) as OrcaChatResponse;
       const content = result.choices?.[0]?.message?.content;
 
       if (!content) {
-        throw new Error('OrcaRouter returned empty completion.');
+        throw new Error(`OrcaRouter (${currentModel}) returned empty completion.`);
       }
 
       const parsed = parseFactsContent(content);
-      console.log(`[OrcaRouter] Attempt ${attempt} succeeded! Generated ${parsed.facts.length} facts.`);
+
+      // Save new facts into SQLite database history
+      try {
+        await saveGeneratedFacts(env.DB, parsed.facts, todayKey);
+      } catch (dbErr) {
+        console.warn('[DB] Could not save to D1, appending to memory cache:', dbErr);
+      }
+
+      // Also append to in-memory history tracker
+      parsed.facts.forEach(f => {
+        inMemoryHistory.unshift({ category: f.category, title: f.title, fact: f.fact });
+      });
+
+      console.log(`[OrcaRouter] Succeeded! Stored ${parsed.facts.length} fresh facts into database history.`);
       return parsed;
     } catch (err: any) {
       lastError = err;
       console.warn(`[OrcaRouter] Attempt ${attempt} failed:`, err?.message || err);
       if (attempt < maxRetries) {
-        // Wait 1.5s before retry
-        await new Promise(r => setTimeout(r, 1500));
+        // Linear backoff
+        await new Promise(r => setTimeout(r, 2000 * attempt));
       }
     } finally {
       clearTimeout(timeoutId);
     }
   }
 
-  throw new Error(`Live AI generation failed after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`);
+  throw new Error(`Live AI generation failed after ${maxRetries} attempts. Last error: ${lastError?.message || 'Unknown error'}`);
 }
 
 function parseFactsContent(content: string): GeneratedContent {

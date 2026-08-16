@@ -10,9 +10,16 @@
   },
   "triggers": {
     "crons": [
-      "0 8 * * *" // Daily at 08:00 UTC (e.g. 15:00 WIB)
+      "0 8 * * *"
     ]
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "intoday-db",
+      "database_id": "intoday-db"
+    }
+  ],
   "vars": {
     "FROM_EMAIL": "InToday Newsletter <onboarding@resend.dev>",
     "ORCAROUTER_BASE_URL": "https://api.orcarouter.ai/v1",
