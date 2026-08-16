@@ -90,7 +90,7 @@ Return ONLY the raw JSON array.`;
       model: model,
       messages: messages,
       temperature: 0.7,
-      max_tokens: 1200
+      max_tokens: 8192
     })
   });
 

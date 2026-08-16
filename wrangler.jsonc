@@ -16,6 +16,6 @@
   "vars": {
     "FROM_EMAIL": "InToday Newsletter <onboarding@resend.dev>",
     "ORCAROUTER_BASE_URL": "https://api.orcarouter.ai/v1",
-    "ORCAROUTER_MODEL": "orcarouter/auto"
+    "ORCAROUTER_MODEL": "deepseek/deepseek-v4-flash-free"
   }
 }
