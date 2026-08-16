@@ -25,37 +25,24 @@ export async function fetchDailyFacts(env: Env): Promise<FactItem[]> {
   }
 
   const baseUrl = (env.ORCAROUTER_BASE_URL || 'https://api.orcarouter.ai/v1').replace(/\/+$/, '');
-  const model = env.ORCAROUTER_MODEL || 'orcarouter/auto';
+  const model = env.ORCAROUTER_MODEL || 'deepseek/deepseek-v4-flash-free';
 
-  const systemPrompt = `You are an editor for the InToday newsletter.
-Generate 4 distinct, surprising, accurate fun facts.
-Do not think at length or write long explanations.
-Return strictly a valid JSON array of 4 objects with keys: "category", "title", "fact", "detail".
-Categories must be exactly: "general", "economics", "law", "psychology".
-Do not output markdown code blocks or extra text, only the raw JSON.`;
-
-  const todayStr = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric'
-  });
-
-  const userPrompt = `Generate today's (${todayStr}) 4 facts:
+  const userPrompt = `Return strictly a JSON array with 4 objects (with keys: "category", "title", "fact", "detail") for:
 1. general: ${NEWSLETTER_CONFIG.categories[0].prompt}
 2. economics: ${NEWSLETTER_CONFIG.categories[1].prompt}
 3. law: ${NEWSLETTER_CONFIG.categories[2].prompt}
 4. psychology: ${NEWSLETTER_CONFIG.categories[3].prompt}
 
-Output JSON only.`;
+Categories must be: "general", "economics", "law", "psychology".
+Output raw JSON array ONLY, no reasoning or markdown wrappers.`;
 
   const messages: OrcaMessage[] = [
-    { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt }
   ];
 
-  // 15-second timeout to ensure the worker never hangs
+  // 60-second timeout to handle peak queue times
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
 
   let response: Response;
   try {
@@ -68,14 +55,14 @@ Output JSON only.`;
       body: JSON.stringify({
         model: model,
         messages: messages,
-        temperature: 0.6,
-        max_tokens: 4096
+        temperature: 0.5,
+        max_tokens: 2048
       }),
       signal: controller.signal
     });
   } catch (err: any) {
     if (err.name === 'AbortError') {
-      throw new Error('OrcaRouter API request timed out after 15 seconds.');
+      throw new Error('OrcaRouter API request timed out after 60 seconds. Please try again.');
     }
     throw err;
   } finally {
