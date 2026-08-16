@@ -50,48 +50,51 @@ export async function fetchDailyContent(env: Env): Promise<GeneratedContent> {
 
   const globalHeadlinesStr = liveRss.globalNews.length > 0
     ? liveRss.globalNews.map((n, i) => `${i + 1}. [${n.source}] ${n.title} (URL: ${n.link})`).join('\n')
-    : '1. [Reuters] Major international clean energy milestones achieved.\n2. [BBC] Global economic summit releases latest forecasts.';
+    : '1. [Reuters] Major AI breakthrough sparks global debate.\n2. [BBC] Unexpected travel and technology rules announced.';
 
   const idHeadlinesStr = liveRss.indonesiaNews.length > 0
     ? liveRss.indonesiaNews.map((n, i) => `${i + 1}. [${n.source}] ${n.title} (URL: ${n.link})`).join('\n')
-    : '1. [Antara] Pembangunan infrastruktur nasional terus dipercepat.\n2. [Kompas] Pertumbuhan ekonomi kuartal ini catatkan hasil positif.';
+    : '1. [Detik] Kebijakan baru transportasi dan tarif liburan jadi perbincangan hangat.\n2. [Kompas] Fenomena tren viral baru di kalangan anak muda kota besar.';
 
-  const userPrompt = `You write for "InToday", a daily newsletter that provides:
-1. Top 5 Most Important Global News
-2. Top 5 Most Important Indonesia News
-3. 4 Fun Facts (easy to understand for junior high schoolers, with real-world examples)
-4. A Glossary of new words
+  const userPrompt = `You are the chief curator of "InToday", a daily newsletter designed to make the reader the most interesting, informed, and conversation-ready person in the room.
 
-Live Headlines to select from:
+EDITORIAL MANDATE:
+1. Filter out dry bureaucratic announcements. Pick the 5 most sensational, "gossip-worthy", and talk-about-with-friends stories globally, and 5 in Indonesia.
+2. The stories must be great conversation starters that you'd bring up when hanging out with normal friends ("Hey guys, did you know that...?"). It can be wild tech shifts, unbelievable societal changes, viral policies, surprising controversies, or jaw-dropping events.
+3. Keep the tone sharp, punchy, and conversational (easy for junior high/high schoolers to digest).
+
+For each story:
+- "title": Catchy, intriguing headline
+- "summary": 2 punchy, engaging sentences explaining the scoop in plain English
+- "conversationStarter": A natural hook to bring up with friends, starting with "🗣️ Bring this up: 'Did you know...?'" and why it's fun to talk about
+- "source": Publisher name
+- "url": Extracted URL or publisher website
+
+Also generate 4 mind-blowing fun facts (with real-world cases) across general, economics, law, psychology, plus a Glossary of 2-4 words.
+
+Headlines to choose from:
 GLOBAL:
 ${globalHeadlinesStr}
 
 INDONESIA:
 ${idHeadlinesStr}
 
-For every news story, provide:
-- "title": Clear headline
-- "summary": 1-2 simple, easy-to-understand sentences in plain English explaining what happened.
-- "takeaway": 1-2 simple sentences answering: "How does this affect you / everyday people?" (e.g. impact on wallet, travel, technology, daily life, or global future).
-- "source": Source name (e.g. Reuters, BBC, Kompas, Antara, Detik)
-- "url": The exact link provided in the list (or source domain)
-
-Return strictly a JSON object with this exact schema:
+Return JSON ONLY with this schema:
 {
   "globalNews": [
     {
-      "title": "Headline",
-      "summary": "Simple explanation.",
-      "takeaway": "How this affects you in everyday life.",
+      "title": "Catchy Headline",
+      "summary": "Juicy, easy-to-understand breakdown.",
+      "conversationStarter": "Did you know that...?",
       "source": "Source Name",
       "url": "https://..."
     }
   ],
   "indonesiaNews": [
     {
-      "title": "Headline",
-      "summary": "Simple explanation.",
-      "takeaway": "How this affects you in everyday life.",
+      "title": "Catchy Headline",
+      "summary": "Juicy, easy-to-understand breakdown.",
+      "conversationStarter": "Did you know that...?",
       "source": "Source Name",
       "url": "https://..."
     }
@@ -99,43 +102,42 @@ Return strictly a JSON object with this exact schema:
   "facts": [
     {
       "category": "general",
-      "title": "Fun Title",
-      "fact": "1 sentence punchy fact.",
-      "explanation": "2-3 simple sentences explaining how/why.",
+      "title": "Catchy Title",
+      "fact": "Punchy 1-sentence core fact.",
+      "explanation": "Simple 2-sentence explanation.",
       "example": "Relatable real-world scenario."
     },
     {
       "category": "economics",
-      "title": "Fun Title",
-      "fact": "1 sentence punchy fact.",
-      "explanation": "2-3 simple sentences explaining how/why.",
-      "example": "Relatable real-world scenario."
+      "title": "Catchy Title",
+      "fact": "Punchy fact.",
+      "explanation": "Simple explanation.",
+      "example": "Relatable scenario."
     },
     {
       "category": "law",
-      "title": "Fun Title",
-      "fact": "1 sentence punchy fact.",
-      "explanation": "2-3 simple sentences explaining how/why.",
-      "example": "Relatable real-world scenario."
+      "title": "Catchy Title",
+      "fact": "Punchy fact.",
+      "explanation": "Simple explanation.",
+      "example": "Relatable scenario."
     },
     {
       "category": "psychology",
-      "title": "Fun Title",
-      "fact": "1 sentence punchy fact.",
-      "explanation": "2-3 simple sentences explaining how/why.",
-      "example": "Relatable real-world scenario."
+      "title": "Catchy Title",
+      "fact": "Punchy fact.",
+      "explanation": "Simple explanation.",
+      "example": "Relatable scenario."
     }
   ],
   "glossary": [
     {
       "term": "Word",
-      "definition": "1 simple definition sentence."
+      "definition": "1 simple sentence definition."
     }
   ]
 }
 
-Make sure "globalNews" has exactly 5 items and "indonesiaNews" has exactly 5 items.
-Return raw JSON ONLY.`;
+Ensure "globalNews" has 5 items and "indonesiaNews" has 5 items. Output raw JSON only.`;
 
   const messages: OrcaMessage[] = [
     { role: 'user', content: userPrompt }
@@ -154,7 +156,7 @@ Return raw JSON ONLY.`;
       body: JSON.stringify({
         model: model,
         messages: messages,
-        temperature: 0.5,
+        temperature: 0.6,
         max_tokens: 3800
       }),
       signal: controller.signal
@@ -203,8 +205,8 @@ function parseAndEnrichContent(
     const matchedRss = liveRss.globalNews[i];
     return {
       title: item.title || matchedRss?.title || 'Global News Update',
-      summary: item.summary || 'Important developments happening around the world today.',
-      takeaway: item.takeaway || 'Stay informed about changing global trends and international relations.',
+      summary: item.summary || 'A major development everyone around the world is talking about today.',
+      conversationStarter: item.conversationStarter || 'Did you know about this? It is sparking massive debates across the internet right now!',
       source: item.source || matchedRss?.source || 'International Press',
       url: item.url || matchedRss?.link || 'https://news.google.com'
     };
@@ -215,8 +217,8 @@ function parseAndEnrichContent(
     const matchedRss = liveRss.indonesiaNews[i];
     return {
       title: item.title || matchedRss?.title || 'Indonesia News Update',
-      summary: item.summary || 'Important developments happening across Indonesia today.',
-      takeaway: item.takeaway || 'This directly affects public services, national economic momentum, or local communities.',
+      summary: item.summary || 'A hot topic making waves across Indonesia today.',
+      conversationStarter: item.conversationStarter || 'Did you hear about this? It is trending everywhere on social media and group chats!',
       source: item.source || matchedRss?.source || 'Indonesian Media',
       url: item.url || matchedRss?.link || 'https://news.google.com'
     };
@@ -256,8 +258,8 @@ function parseAndEnrichContent(
 
   if (glossary.length === 0) {
     glossary.push({
-      term: 'Diplomatic Accord',
-      definition: 'An official formal agreement reached between different nations.'
+      term: 'Viral Phenomenon',
+      definition: 'An event or trend that spreads rapidly through social networks and word-of-mouth.'
     });
   }
 
@@ -265,80 +267,80 @@ function parseAndEnrichContent(
 }
 
 /**
- * Curated fallback content with clickable links, takeaways, facts, and glossary
+ * Curated fallback content loaded with conversational dynamite
  */
 export function getCuratedContentFallback(): GeneratedContent {
   return {
     globalNews: [
       {
-        title: 'Global Renewable Energy Reaches Record Output',
-        summary: 'Solar and wind power produced more electricity globally this month than fossil fuels across several major economies.',
-        takeaway: 'Cheaper green electricity means cleaner air and lower long-term household utility bills across the world.',
+        title: 'Scientists Accidentally Discovered How to Turn Plastic Into Real Diamonds',
+        summary: 'Researchers in Germany used high-powered lasers to blast everyday PET plastic bottles, replicating the extreme core pressure of giant planets and creating microscopic real diamonds.',
+        conversationStarter: 'Did you know scientists just figured out how to zap cheap plastic soda bottles with lasers and turn them into real nano-diamonds?',
+        source: 'Science Daily',
+        url: 'https://www.sciencedaily.com'
+      },
+      {
+        title: 'South Korea is Replacing Traditional Cashiers with AI Face Recognition Everywhere',
+        summary: 'Over 3,000 convenience stores across Seoul now allow customers to grab snacks and walk straight out the door by scanning their smiling face in under 0.5 seconds.',
+        conversationStarter: 'Did you hear that thousands of Korean stores let you pay by literally just looking at a mirror scanner and walking out with snacks?',
+        source: 'Korea Times',
+        url: 'https://www.koreatimes.co.kr'
+      },
+      {
+        title: 'New Global Study Reveals Why Everyone Feels Like Time is Passing Faster',
+        summary: 'Neuroscientists discovered that because we consume so much rapid-fire short video content, our brain creates fewer novel memory checkpoints, tricking us into feeling months evaporate.',
+        conversationStarter: 'Did you ever feel like this year is flying by at 2x speed? Science just confirmed that doomscrolling actually shrinks our brain\'s memory markers of time!',
+        source: 'BBC Science',
+        url: 'https://www.bbc.com'
+      },
+      {
+        title: 'Major Flight Routes Are Being Rerouted Due to Solar Storm Radio Blackouts',
+        summary: 'A series of massive solar flares from the sun disrupted high-frequency aviation satellites, forcing international airlines on polar routes to take long detours.',
+        conversationStarter: 'Did you know the sun just had a temper tantrum and shot solar flares that messed up transatlantic airplane flight paths?',
         source: 'Reuters',
         url: 'https://www.reuters.com'
       },
       {
-        title: 'International Space Station Welcomes New Crew',
-        summary: 'Astronauts from three continents docked safely with the ISS to begin a mission researching microgravity medicine.',
-        takeaway: 'Medical tests conducted in space help scientists develop better vaccines and treatments for diseases back on Earth.',
-        source: 'BBC News',
-        url: 'https://www.bbc.com/news'
-      },
-      {
-        title: 'Global Tech Summit Finalizes AI Safety Standards',
-        summary: 'Representatives from 40 nations signed a pledge establishing transparency and privacy benchmarks for AI apps.',
-        takeaway: 'New rules ensure AI features in your phone and search engines protect your private data and prevent scams.',
-        source: 'The Verge',
-        url: 'https://www.theverge.com'
-      },
-      {
-        title: 'Major Breakthrough in Ocean Plastic Cleanup',
-        summary: 'Engineers deployed new floating barrier systems that collected over 100 tons of plastic debris from the Pacific.',
-        takeaway: 'Less plastic in the ocean protects fish populations and keeps microplastics out of the global food supply.',
-        source: 'The Guardian',
-        url: 'https://www.theguardian.com'
-      },
-      {
-        title: 'Global Microchip Supply Chains Stabilize',
-        summary: 'New semiconductor factories opened in Europe and Asia, ending supply shortages for cars and electronics.',
-        takeaway: 'Gadgets like smartphones, game consoles, and laptops will face fewer stock delays and price gouging.',
-        source: 'Bloomberg',
-        url: 'https://www.bloomberg.com'
+        title: 'A Remote Island in Japan is Paying Young People $10,000 to Move and Farm Seaweed',
+        summary: 'To combat an aging population, a scenic island near Okinawa is offering free housing, high-speed fiber internet, and cash grants to anyone under 35 willing to relocate.',
+        conversationStarter: 'Who is ready to quit their job? A gorgeous Japanese island is literally paying people $10,000 plus free rent just to move there and work remotely!',
+        source: 'Japan Today',
+        url: 'https://japantoday.com'
       }
     ],
     indonesiaNews: [
       {
-        title: 'Pembangunan IKN Nusantara Capai Tahap Krusial',
-        summary: 'Fasilitas pemerintahan utama dan sistem transportasi hijau di Ibu Kota Nusantara resmi siap untuk beroperasi penuh.',
-        takeaway: 'Pemerataan pusat ekonomi baru di Kalimantan akan membuka ribuan lapangan kerja dan memecah kepadatan di Pulau Jawa.',
+        title: 'Kereta Cepat Whoosh Tambah Rute Baru & Tembus 5 Juta Penumpang',
+        summary: 'Lonjakan minat liburan membuat antrean Whoosh Jakarta-Bandung membludak, dan rencana perpanjangan jalur langsung menuju Surabaya kini resmi mulai disurvei.',
+        conversationStarter: 'Did you hear that Whoosh just hit 5 million riders and they are now officially plotting the direct track extension all the way to Surabaya?',
+        source: 'Detik Travel',
+        url: 'https://travel.detik.com'
+      },
+      {
+        title: 'Fenomena "Coffeeshop Tanpa Barista" Pertama di Jakarta Bikin Heboh',
+        summary: 'Kafe berbasis lengan robotik pintar di Jakarta Selatan menyajikan racikan kopi artisan dengan akurasi suhu 0.1 derajat tanpa ada satu pun pelayan manusia.',
+        conversationStarter: 'Have you guys seen that new coffee spot in South Jakarta where you order on an app and a robot arm brews your latte with zero humans behind the bar?',
+        source: 'Kompas Lifestyle',
+        url: 'https://lifestyle.kompas.com'
+      },
+      {
+        title: 'Aturan Baru Tilang Elektronik (ETLE) Drone Mulai Berpatroli di Jalan Tol',
+        summary: 'Korlantas Polri memperluas pengawasan jalan tol menggunakan drone canggih yang bisa mendeteksi pengendara main HP atau ugal-ugalan dari ketinggian 50 meter.',
+        conversationStarter: 'Careful on the highway this weekend—police drones are now flying 50 meters in the air capturing high-res photos of people texting while driving!',
+        source: 'Tribun News',
+        url: 'https://www.tribunnews.com'
+      },
+      {
+        title: 'Kopi Specialty Indonesia Jadi Rebutan di Pameran Dunia Milan',
+        summary: 'Biji kopi luwak liar dan Arabika Gayo berhasil menyabet penghargaan tertinggi di Milan Expo, membuat pesanan dari kafe-kafe mewah Eropa melonjak.',
+        conversationStarter: 'Our local Gayo coffee just beat out hundreds of international roasters in Milan to take the gold trophy as the world’s most flavorful bean!',
         source: 'Antara News',
         url: 'https://www.antaranews.com'
       },
       {
-        title: 'Ekspor Produk Manufaktur dan Nikel RI Meningkat',
-        summary: 'Hilirisasi industri mineral nasional mencatatkan kenaikan surplus perdagangan ekspor sebesar 12% kuartal ini.',
-        takeaway: 'Cadangan devisa negara yang kuat membantu menstabilkan nilai tukar Rupiah sehingga harga barang impor tidak melonjak.',
-        source: 'Kompas',
-        url: 'https://www.kompas.com'
-      },
-      {
-        title: 'Program Vaksinasi Anak Sekolah (BIAS) Digelar Serentak',
-        summary: 'Dinas Kesehatan di berbagai provinsi memulai Bulan Imunisasi Anak Sekolah untuk melindungi puluhan ribu siswa dari penyakit menular.',
-        takeaway: 'Membantu menjaga kekebalan kelompok di lingkungan sekolah sehingga anak-anak dan adik di rumah tidak mudah tertular sakit.',
-        source: 'Detik News',
-        url: 'https://news.detik.com'
-      },
-      {
-        title: 'Kereta Cepat Whoosh Catat Rekor 5 Juta Penumpang',
-        summary: 'Layanan transportasi Whoosh relasi Jakarta-Bandung berhasil melayani lonjakan penumpang dengan ketepatan waktu 99%.',
-        takeaway: 'Perjalanan antar kota makin cepat dan efisien, memangkas waktu tempuh dari 3 jam menjadi cuma 45 menit.',
-        source: 'Tempo',
-        url: 'https://www.tempo.co'
-      },
-      {
-        title: 'Startup Pertanian Lokal Raih Pendanaan Global',
-        summary: 'Platform agritech asal Indonesia yang membantu petani kopi lokal sukses mendapatkan suntikan modal ventura internasional.',
-        takeaway: 'Petani lokal bisa menjual hasil panen dengan harga lebih adil langsung ke pembeli tanpa terpotong tengkulak.',
+        title: 'Rupiah Menguat Tajam Berkat Lonjakan Investasi Pabrik Baterai EV Global',
+        summary: 'Dua raksasa otomotif dunia resmi memulai pembangunan pabrik sel baterai raksasa di Jawa Barat, menyuntikkan likuiditas miliaran dolar ke pasar domestik.',
+        conversationStarter: 'Did you see the currency charts? Rupiah is flexing strong because global EV giants just poured billions into new West Java mega-factories!',
         source: 'CNBC Indonesia',
         url: 'https://www.cnbcindonesia.com'
       }
