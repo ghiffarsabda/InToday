@@ -50,23 +50,23 @@ export async function fetchDailyContent(env: Env): Promise<GeneratedContent> {
 
   const globalHeadlinesStr = liveRss.globalNews.length > 0
     ? liveRss.globalNews.map((n, i) => `${i + 1}. [${n.source}] ${n.title} (URL: ${n.link})`).join('\n')
-    : '1. [Reuters] Major AI breakthrough sparks global debate.\n2. [BBC] Unexpected travel and technology rules announced.';
+    : '1. [Reuters] Major breakthrough in global technology sparks debate.\n2. [BBC] Unexpected international travel and lifestyle rules announced.';
 
   const idHeadlinesStr = liveRss.indonesiaNews.length > 0
     ? liveRss.indonesiaNews.map((n, i) => `${i + 1}. [${n.source}] ${n.title} (URL: ${n.link})`).join('\n')
-    : '1. [Detik] Kebijakan baru transportasi dan tarif liburan jadi perbincangan hangat.\n2. [Kompas] Fenomena tren viral baru di kalangan anak muda kota besar.';
+    : '1. [Detik] Kebijakan baru transportasi dan fasilitas publik jadi sorotan.\n2. [Kompas] Fenomena tren viral baru di kalangan anak muda perkotaan.';
 
   const userPrompt = `You are the chief curator of "InToday", a daily newsletter designed to make the reader the most interesting, informed, and conversation-ready person in the room.
 
 EDITORIAL MANDATE:
-1. Filter out dry bureaucratic announcements. Pick the 5 most sensational, "gossip-worthy", and talk-about-with-friends stories globally, and 5 in Indonesia.
-2. The stories must be great conversation starters that you'd bring up when hanging out with normal friends ("Hey guys, did you know that...?"). It can be wild tech shifts, unbelievable societal changes, viral policies, surprising controversies, or jaw-dropping events.
-3. Keep the tone sharp, punchy, and conversational (easy for junior high/high schoolers to digest).
+1. Filter out dry bureaucratic announcements. Pick the 5 most sensational, buzzworthy, and talk-about-with-friends stories globally, and 5 in Indonesia.
+2. The stories should be fascinating topics you'd bring up when hanging out with normal friends. Keep the tone sharp, punchy, and conversational (easy for junior high/high schoolers to digest).
+3. Under every news story, provide a practical "takeaway" answering: "How does this affect you / everyday people?" (impact on daily life, wallet, technology, habits, or the future).
 
 For each story:
 - "title": Catchy, intriguing headline
-- "summary": 2 punchy, engaging sentences explaining the scoop in plain English
-- "conversationStarter": A natural hook to bring up with friends, starting with "🗣️ Bring this up: 'Did you know...?'" and why it's fun to talk about
+- "summary": 2 punchy, engaging sentences explaining what happened in plain English
+- "takeaway": 1-2 simple sentences explaining how this affects you and your daily life
 - "source": Publisher name
 - "url": Extracted URL or publisher website
 
@@ -85,7 +85,7 @@ Return JSON ONLY with this schema:
     {
       "title": "Catchy Headline",
       "summary": "Juicy, easy-to-understand breakdown.",
-      "conversationStarter": "Did you know that...?",
+      "takeaway": "How this affects you in everyday life.",
       "source": "Source Name",
       "url": "https://..."
     }
@@ -94,7 +94,7 @@ Return JSON ONLY with this schema:
     {
       "title": "Catchy Headline",
       "summary": "Juicy, easy-to-understand breakdown.",
-      "conversationStarter": "Did you know that...?",
+      "takeaway": "How this affects you in everyday life.",
       "source": "Source Name",
       "url": "https://..."
     }
@@ -206,7 +206,7 @@ function parseAndEnrichContent(
     return {
       title: item.title || matchedRss?.title || 'Global News Update',
       summary: item.summary || 'A major development everyone around the world is talking about today.',
-      conversationStarter: item.conversationStarter || 'Did you know about this? It is sparking massive debates across the internet right now!',
+      takeaway: item.takeaway || 'Stay informed about changing global trends and how they impact everyday lives.',
       source: item.source || matchedRss?.source || 'International Press',
       url: item.url || matchedRss?.link || 'https://news.google.com'
     };
@@ -218,7 +218,7 @@ function parseAndEnrichContent(
     return {
       title: item.title || matchedRss?.title || 'Indonesia News Update',
       summary: item.summary || 'A hot topic making waves across Indonesia today.',
-      conversationStarter: item.conversationStarter || 'Did you hear about this? It is trending everywhere on social media and group chats!',
+      takeaway: item.takeaway || 'This directly affects public services, local communities, or national trends.',
       source: item.source || matchedRss?.source || 'Indonesian Media',
       url: item.url || matchedRss?.link || 'https://news.google.com'
     };
@@ -267,7 +267,7 @@ function parseAndEnrichContent(
 }
 
 /**
- * Curated fallback content loaded with conversational dynamite
+ * Curated fallback content loaded with talk-worthy topics and takeaways
  */
 export function getCuratedContentFallback(): GeneratedContent {
   return {
@@ -275,35 +275,35 @@ export function getCuratedContentFallback(): GeneratedContent {
       {
         title: 'Scientists Accidentally Discovered How to Turn Plastic Into Real Diamonds',
         summary: 'Researchers in Germany used high-powered lasers to blast everyday PET plastic bottles, replicating the extreme core pressure of giant planets and creating microscopic real diamonds.',
-        conversationStarter: 'Did you know scientists just figured out how to zap cheap plastic soda bottles with lasers and turn them into real nano-diamonds?',
+        takeaway: 'In the future, recycling everyday plastic waste could help create super-durable electronic chips and medical instruments at a fraction of the cost.',
         source: 'Science Daily',
         url: 'https://www.sciencedaily.com'
       },
       {
         title: 'South Korea is Replacing Traditional Cashiers with AI Face Recognition Everywhere',
         summary: 'Over 3,000 convenience stores across Seoul now allow customers to grab snacks and walk straight out the door by scanning their smiling face in under 0.5 seconds.',
-        conversationStarter: 'Did you hear that thousands of Korean stores let you pay by literally just looking at a mirror scanner and walking out with snacks?',
+        takeaway: 'Wallet-free and phone-free shopping is becoming the global standard, meaning you will soon never have to wait in a checkout line again.',
         source: 'Korea Times',
         url: 'https://www.koreatimes.co.kr'
       },
       {
         title: 'New Global Study Reveals Why Everyone Feels Like Time is Passing Faster',
         summary: 'Neuroscientists discovered that because we consume so much rapid-fire short video content, our brain creates fewer novel memory checkpoints, tricking us into feeling months evaporate.',
-        conversationStarter: 'Did you ever feel like this year is flying by at 2x speed? Science just confirmed that doomscrolling actually shrinks our brain\'s memory markers of time!',
+        takeaway: 'Taking periodic breaks from endless scrolling and doing new offline activities actually helps your brain slow down your perception of time.',
         source: 'BBC Science',
         url: 'https://www.bbc.com'
       },
       {
         title: 'Major Flight Routes Are Being Rerouted Due to Solar Storm Radio Blackouts',
         summary: 'A series of massive solar flares from the sun disrupted high-frequency aviation satellites, forcing international airlines on polar routes to take long detours.',
-        conversationStarter: 'Did you know the sun just had a temper tantrum and shot solar flares that messed up transatlantic airplane flight paths?',
+        takeaway: 'Solar weather can cause unexpected flight delays and slight GPS navigation glitches on your personal devices during severe solar storms.',
         source: 'Reuters',
         url: 'https://www.reuters.com'
       },
       {
         title: 'A Remote Island in Japan is Paying Young People $10,000 to Move and Farm Seaweed',
         summary: 'To combat an aging population, a scenic island near Okinawa is offering free housing, high-speed fiber internet, and cash grants to anyone under 35 willing to relocate.',
-        conversationStarter: 'Who is ready to quit their job? A gorgeous Japanese island is literally paying people $10,000 plus free rent just to move there and work remotely!',
+        takeaway: 'As remote work expands, global cities and islands are competing directly to offer free rent and perks to attract young talent.',
         source: 'Japan Today',
         url: 'https://japantoday.com'
       }
@@ -312,35 +312,35 @@ export function getCuratedContentFallback(): GeneratedContent {
       {
         title: 'Kereta Cepat Whoosh Tambah Rute Baru & Tembus 5 Juta Penumpang',
         summary: 'Lonjakan minat liburan membuat antrean Whoosh Jakarta-Bandung membludak, dan rencana perpanjangan jalur langsung menuju Surabaya kini resmi mulai disurvei.',
-        conversationStarter: 'Did you hear that Whoosh just hit 5 million riders and they are now officially plotting the direct track extension all the way to Surabaya?',
+        takeaway: 'Perjalanan antar kota di Pulau Jawa akan semakin hemat waktu, membuka peluang bisnis dan pariwisata akhir pekan yang jauh lebih fleksibel.',
         source: 'Detik Travel',
         url: 'https://travel.detik.com'
       },
       {
         title: 'Fenomena "Coffeeshop Tanpa Barista" Pertama di Jakarta Bikin Heboh',
         summary: 'Kafe berbasis lengan robotik pintar di Jakarta Selatan menyajikan racikan kopi artisan dengan akurasi suhu 0.1 derajat tanpa ada satu pun pelayan manusia.',
-        conversationStarter: 'Have you guys seen that new coffee spot in South Jakarta where you order on an app and a robot arm brews your latte with zero humans behind the bar?',
+        takeaway: 'Otomatisasi F&B kini merambah gaya hidup lokal, membuat pesanan kopi lebih konsisten dan cepat tanpa antrean panjang.',
         source: 'Kompas Lifestyle',
         url: 'https://lifestyle.kompas.com'
       },
       {
         title: 'Aturan Baru Tilang Elektronik (ETLE) Drone Mulai Berpatroli di Jalan Tol',
         summary: 'Korlantas Polri memperluas pengawasan jalan tol menggunakan drone canggih yang bisa mendeteksi pengendara main HP atau ugal-ugalan dari ketinggian 50 meter.',
-        conversationStarter: 'Careful on the highway this weekend—police drones are now flying 50 meters in the air capturing high-res photos of people texting while driving!',
+        takeaway: 'Pastikan selalu fokus berkendara dan tidak menyentuh ponsel saat mengemudi di jalan tol agar terhindar dari tilang otomatis.',
         source: 'Tribun News',
         url: 'https://www.tribunnews.com'
       },
       {
         title: 'Kopi Specialty Indonesia Jadi Rebutan di Pameran Dunia Milan',
         summary: 'Biji kopi luwak liar dan Arabika Gayo berhasil menyabet penghargaan tertinggi di Milan Expo, membuat pesanan dari kafe-kafe mewah Eropa melonjak.',
-        conversationStarter: 'Our local Gayo coffee just beat out hundreds of international roasters in Milan to take the gold trophy as the world’s most flavorful bean!',
+        takeaway: 'Popularitas komoditas lokal di panggung dunia menaikkan daya tawar petani Indonesia dan membuka peluang ekspor yang menguntungkan.',
         source: 'Antara News',
         url: 'https://www.antaranews.com'
       },
       {
         title: 'Rupiah Menguat Tajam Berkat Lonjakan Investasi Pabrik Baterai EV Global',
         summary: 'Dua raksasa otomotif dunia resmi memulai pembangunan pabrik sel baterai raksasa di Jawa Barat, menyuntikkan likuiditas miliaran dolar ke pasar domestik.',
-        conversationStarter: 'Did you see the currency charts? Rupiah is flexing strong because global EV giants just poured billions into new West Java mega-factories!',
+        takeaway: 'Penguatan Rupiah membantu menstabilkan harga gadget impor dan kebutuhan pokok, serta membuka ribuan lapangan kerja teknis baru.',
         source: 'CNBC Indonesia',
         url: 'https://www.cnbcindonesia.com'
       }

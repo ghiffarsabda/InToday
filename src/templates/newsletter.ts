@@ -4,9 +4,9 @@ const FONT_STACK = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Not
 
 /**
  * Renders the newsletter in clean GitHub README markdown style with:
- * - Phenomenal, talk-worthy Global & Indonesia news with "Conversation Starter" hooks
- * - Clickable source links
- * - 4 mind-blowing fun facts with real-world cases
+ * - Top 5 Global News with "How this affects you" + Clickable Source Link
+ * - Top 5 Indonesia News with "How this affects you" + Clickable Source Link
+ * - 4 Curated Fun Facts with real-world examples
  * - Glossary
  */
 export function renderNewsletterHtml(data: NewsletterData): string {
@@ -23,9 +23,9 @@ export function renderNewsletterHtml(data: NewsletterData): string {
         ${news.summary}
       </p>
 
-      <!-- Conversation Starter Callout -->
+      <!-- How this affects you -->
       <div style="margin: 0 0 8px 0; padding: 8px 12px; background-color: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; font-family: ${FONT_STACK}; font-size: 13px; line-height: 1.5; color: #24292f;">
-        <strong style="font-weight: 600; color: #0969da;">🗣️ Conversation starter:</strong> ${news.conversationStarter}
+        <strong style="font-weight: 600; color: #0969da;">🤔 How this affects you:</strong> ${news.takeaway}
       </div>
 
       <div style="font-family: ${FONT_STACK}; font-size: 12px; color: #656d76;">
@@ -45,9 +45,9 @@ export function renderNewsletterHtml(data: NewsletterData): string {
         ${news.summary}
       </p>
 
-      <!-- Conversation Starter Callout -->
+      <!-- How this affects you -->
       <div style="margin: 0 0 8px 0; padding: 8px 12px; background-color: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; font-family: ${FONT_STACK}; font-size: 13px; line-height: 1.5; color: #24292f;">
-        <strong style="font-weight: 600; color: #0969da;">🗣️ Conversation starter:</strong> ${news.conversationStarter}
+        <strong style="font-weight: 600; color: #0969da;">🤔 How this affects you:</strong> ${news.takeaway}
       </div>
 
       <div style="font-family: ${FONT_STACK}; font-size: 12px; color: #656d76;">
@@ -113,19 +113,19 @@ export function renderNewsletterHtml(data: NewsletterData): string {
 
     <blockquote style="margin: 0 0 24px 0; padding: 0 1em; color: #57606a; border-left: 0.25em solid #d0d7de; font-family: ${FONT_STACK}; font-size: 14px; font-weight: 400; line-height: 1.5;">
       <p style="margin: 0;">
-        Your daily insider brief: phenomenal conversation starters, breaking global scoop, and mind-expanding micro-insights.
+        Your daily briefing: top essential news and fascinating micro-insights explained in plain English.
       </p>
     </blockquote>
 
-    <!-- ## 🌐 Global Stories Everyone is Talking About -->
+    <!-- ## 🌐 Global News You Can't Miss -->
     <h2 style="font-family: ${FONT_STACK}; font-size: 20px; font-weight: 600; line-height: 1.25; color: #1f2328; margin: 32px 0 16px 0; padding-bottom: 0.3em; border-bottom: 1px solid #d0d7de;">
-      🌐 Global Stories Everyone is Talking About
+      🌐 Global News You Can't Miss
     </h2>
     ${globalNewsHtml}
 
-    <!-- ## 🇮🇩 What's Buzzing in Indonesia -->
+    <!-- ## 🇮🇩 Indonesia News You Can't Miss -->
     <h2 style="font-family: ${FONT_STACK}; font-size: 20px; font-weight: 600; line-height: 1.25; color: #1f2328; margin: 36px 0 16px 0; padding-bottom: 0.3em; border-bottom: 1px solid #d0d7de;">
-      🇮🇩 What's Buzzing in Indonesia
+      🇮🇩 Indonesia News You Can't Miss
     </h2>
     ${idNewsHtml}
 
@@ -171,24 +171,24 @@ export function renderNewsletterText(data: NewsletterData): string {
   const { formattedDate, globalNews, indonesiaNews, facts, glossary } = data;
 
   let text = `# InToday · ${formattedDate}\n\n`;
-  text += `> Your daily insider brief: phenomenal conversation starters and breaking scoop.\n\n`;
+  text += `> Your daily briefing: top essential news and fascinating micro-insights.\n\n`;
 
-  text += `## 🌐 Global Stories Everyone is Talking About\n\n`;
+  text += `## 🌐 Global News You Can't Miss\n\n`;
   for (let i = 0; i < (globalNews || []).length; i++) {
     const n = globalNews[i];
     text += `${i + 1}. **${n.title}**\n`;
     text += `${n.summary}\n`;
-    text += `🗣️ Conversation starter: ${n.conversationStarter}\n`;
+    text += `🤔 How this affects you: ${n.takeaway}\n`;
     text += `Source: ${n.source} (${n.url || 'https://news.google.com'})\n\n`;
   }
   text += `---\n\n`;
 
-  text += `## 🇮🇩 What's Buzzing in Indonesia\n\n`;
+  text += `## 🇮🇩 Indonesia News You Can't Miss\n\n`;
   for (let i = 0; i < (indonesiaNews || []).length; i++) {
     const n = indonesiaNews[i];
     text += `${i + 1}. **${n.title}**\n`;
     text += `${n.summary}\n`;
-    text += `🗣️ Conversation starter: ${n.conversationStarter}\n`;
+    text += `🤔 How this affects you: ${n.takeaway}\n`;
     text += `Source: ${n.source} (${n.url || 'https://news.google.com'})\n\n`;
   }
   text += `---\n\n`;

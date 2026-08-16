@@ -16,7 +16,7 @@ export interface GlossaryItem {
 export interface NewsItem {
   title: string;
   summary: string;
-  conversationStarter: string; // The "Did you know?" hook to bring up with friends
+  takeaway: string; // "How this affects you"
   source: string;
   url?: string;
 }
