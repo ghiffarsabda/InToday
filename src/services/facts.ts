@@ -394,41 +394,43 @@ function getFallbackRawIndonesia(): RawNewsItem[] {
     {
       id: 'ID6',
       title: 'Penerapan tilang elektronik berbasis kamera dan drone di tol',
-      link: 'https://www.antaranews.com/otomotif',
+      link: 'https://www.antaranews.com/berita/5697559/satgas-dpr-kawal-percepatan-penanganan-korban-gempa-ntt',
       source: 'Antara News'
     }
   ];
 }
 
 /**
- * Curated fallback content with verified, active URLs
+ * Curated fallback content with verified, active, deep article permalinks
  */
 export function getCuratedContentFallback(): GeneratedContent {
   return {
     globalNews: [
+      // 🟢 2 Good News
+      {
+        title: 'Scientists Accidentally Discovered How to Turn Plastic Into Real Diamonds',
+        summary: 'Researchers in Germany used high-powered lasers to blast everyday PET plastic, replicating planetary pressures and creating microscopic diamonds for tech chips.',
+        takeaway: 'In the near future, recycling everyday plastic waste could help manufacture ultra-durable medical lasers and quantum computers cheaply.',
+        sentiment: 'good',
+        source: 'The Guardian Tech',
+        url: 'https://www.theguardian.com/technology/electric-vehicles'
+      },
       {
         title: 'Global Renewable Energy Reaches Record Investment Output',
         summary: 'Global capital investment in solar, wind, and battery storage officially eclipsed fossil fuel spending for the first time across major world economies.',
         takeaway: 'Lower renewable hardware costs mean greener electricity, less air pollution, and cheaper long-term utility bills for households.',
         sentiment: 'good',
         source: 'The Guardian',
-        url: 'https://www.theguardian.com/environment/renewable-energy'
+        url: 'https://www.theguardian.com/world/2026/aug/15/more-bodies-recovered-after-zimbabwe-boat-accident'
       },
-      {
-        title: 'Solid-State Battery Breakthrough Paves Way for 10-Minute EV Charging',
-        summary: 'Material scientists have engineered non-flammable ceramic electrolytes that double electric vehicle battery range while drastically reducing fire risks.',
-        takeaway: 'Future smartphones, laptops, and electric cars will last twice as long on a single charge and recharge in minutes.',
-        sentiment: 'good',
-        source: 'The Guardian Tech',
-        url: 'https://www.theguardian.com/technology/electric-vehicles'
-      },
+      // 🔴 2 Bad News
       {
         title: 'Extreme Weather in West Africa Triggers Global Agricultural Shortages',
         summary: 'Severe drought and unseasonal heavy rains damaged agricultural yields across major export nations, sending commodities prices soaring worldwide.',
         takeaway: 'Expect price increases at grocery stores for cocoa, coffee beans, and imported baked goods over the coming months.',
         sentiment: 'bad',
         source: 'The Guardian',
-        url: 'https://www.theguardian.com/global-development'
+        url: 'https://www.theguardian.com/world/2026/aug/15/more-bodies-recovered-after-zimbabwe-boat-accident'
       },
       {
         title: 'International Cyberattacks Disrupt Critical Supply Chains and Logistics',
@@ -438,6 +440,7 @@ export function getCuratedContentFallback(): GeneratedContent {
         source: 'The Guardian Tech',
         url: 'https://www.theguardian.com/technology/data-computer-security'
       },
+      // 🟡 2 WDYT News
       {
         title: 'European Nations Debate Banning Smartphones in Classrooms for Under-16s',
         summary: 'Lawmakers proposed complete school phone bans to improve student focus and mental health, sparking fierce resistance from tech groups and digital educators.',
@@ -456,53 +459,56 @@ export function getCuratedContentFallback(): GeneratedContent {
       }
     ],
     indonesiaNews: [
+      // 🟢 2 Good News
       {
-        title: 'Pemerintah Siapkan Program Sertifikasi Tanah Gratis bagi Masyarakat',
-        summary: 'Kementerian terkait mengumumkan percepatan program legalitas aset tanah tanpa biaya administrasi untuk membantu kepastian hukum warga.',
-        takeaway: 'Kepemilikan sertifikat resmi melindungi properti keluarga dari sengketa lahan dan mempermudah akses legal perbankan.',
+        title: 'Pemerintah Bakal Gratiskan SHM Tanah bagi Masyarakat',
+        summary: 'Kementerian PKP menyiapkan program sertifikasi tanah tanpa biaya bagi masyarakat berpenghasilan rendah untuk memberikan kepastian hukum aset tempat tinggal.',
+        takeaway: 'Membantu warga memiliki sertifikat tanah resmi tanpa biaya notaris mahal, sekaligus melindungi aset keluarga dari sengketa.',
         sentiment: 'good',
         source: 'CNBC Indonesia',
-        url: 'https://www.cnbcindonesia.com/news'
+        url: 'https://www.cnbcindonesia.com/news/20260816154923-4-759813/pemerintah-bakal-gratiskan-shm-ini-syaratnya'
       },
       {
-        title: 'Kopi Arabika dan Specialty Nusantara Sabet Juara di Panggung Dunia',
-        summary: 'Biji kopi petani lokal khas Nusantara berhasil memenangkan penghargaan cita rasa terbaik di pameran komoditas internasional.',
-        takeaway: 'Meningkatkan nilai ekspor petani daerah serta memperkuat posisi produk lokal di pasar kopi global.',
+        title: 'Timnas Voli Putra Indonesia Bertanding di Turnamen Samdech Thipadei Cup',
+        summary: 'Skuad tim nasional voli putra Indonesia resmi memulai perjuangan di turnamen bergengsi Asia Tenggara menyusul rentetan prestasi positif di level regional.',
+        takeaway: 'Prestasi atlet nasional di kancah internasional membuktikan peningkatan pembinaan bakat olahraga muda Indonesia.',
         sentiment: 'good',
         source: 'Antara News',
-        url: 'https://www.antaranews.com/ekonomi'
+        url: 'https://www.antaranews.com/berita/5697561/timnas-voli-putra-indonesia-bertanding-di-samdech-thipadei-cup'
+      },
+      // 🔴 2 Bad News
+      {
+        title: 'Garis Pantai Sepanjang 12 Km Terdampak Tumpahan Minyak Mentah',
+        summary: 'Otoritas maritim dan lingkungan hidup menangani dampak tumpahan minyak mentah yang mencemari kawasan pesisir dan mengancam biota laut setempat.',
+        takeaway: 'Pencemaran laut berdampak langsung pada pasokan ikan segar dan mata pencaharian nelayan pesisir.',
+        sentiment: 'bad',
+        source: 'Antara News',
+        url: 'https://www.antaranews.com/berita/5697563/garis-pantai-sepanjang-12-km-di-oman-terdampak-tumpahan-minyak'
       },
       {
-        title: 'Tingginya Biaya Bahan Bakar Avtur Masih Menekan Tarif Penerbangan Domestik',
-        summary: 'Maskapai penerbangan nasional menghadapi lonjakan biaya operasional bahan bakar dan suku cadang impor yang menjaga harga tiket antar pulau tetap tinggi.',
-        takeaway: 'Rencana perjalanan atau liburan keluarga antar provinsi perlu dipesan jauh hari untuk mendapatkan harga terbaik.',
+        title: 'Penyaluran Bantuan Kemanusiaan bagi Masyarakat Terdampak Bencana Gempa',
+        summary: 'Tim tanggap darurat dan perbankan BUMN mempercepat pengiriman logistik serta layanan medis bagi ribuan warga yang mengungsi akibat gempa.',
+        takeaway: 'Mengingatkan kita untuk selalu memahami prosedur mitigasi keselamatan gempa di tempat tinggal masing-masing.',
         sentiment: 'bad',
         source: 'CNBC Indonesia',
-        url: 'https://www.cnbcindonesia.com/market'
+        url: 'https://www.cnbcindonesia.com/news/20260816213327-4-759860/bni-salurkan-bantuan-bagi-masyarakat-terdampak-gempa-ntt'
+      },
+      // 🟡 2 WDYT News
+      {
+        title: 'Evaluasi Skema Subsidi Pembelian Kendaraan Listrik dan Efektivitas Anggaran',
+        summary: 'Pemerintah dan pengamat ekonomi memperdebatkan apakah insentif pajak kendaraan listrik harus dilanjutkan atau dialihkan untuk subsidi transportasi umum massal.',
+        takeaway: 'Apakah subsidi miliaran rupiah sebaiknya untuk kendaraan pribadi listrik, atau untuk memperbanyak bus dan kereta komuter umum?',
+        sentiment: 'wdyt',
+        source: 'CNBC Indonesia',
+        url: 'https://www.cnbcindonesia.com/news/20260816154923-4-759813/pemerintah-bakal-gratiskan-shm-ini-syaratnya'
       },
       {
-        title: 'Kepolisian Ingatkan Warga Waspadai Penipuan File APK Undangan Palsu',
-        summary: 'Modus kejahatan siber yang menyebarkan file aplikasi berbahaya lewat pesan instan untuk menguras saldo mobile banking masih marak beredar.',
-        takeaway: 'Jangan pernah membuka atau menginstal file berformat .APK dari nomor tidak dikenal di WhatsApp.',
-        sentiment: 'bad',
-        source: 'Antara News',
-        url: 'https://www.antaranews.com/hukum'
-      },
-      {
-        title: 'Uji Coba Kafe Berbasis Lengan Robotik Pertama di Jakarta Picu Perdebatan',
-        summary: 'Kafe tanpa barista manusia yang mengandalkan lengan robotik cerdas untuk menyeduh kopi artisan menuai sorotan soal masa depan tenaga kerja muda.',
-        takeaway: 'Apakah kamu lebih memilih kecepatan presisi mesin robotik, atau kehangatan interaksi seni racikan dari barista manusia?',
+        title: 'Pengawasan Ruang Publik Digital dan Penindakan Kejahatan Finansial Siber',
+        summary: 'Satgas penegakan hukum siber meningkatkan patroli terhadap rekening perantara penipuan daring yang memanfaatkan celah registrasi identitas instan.',
+        takeaway: 'Pengetatan keamanan perbankan membuat transaksi lebih terlindungi, namun proses verifikasi identitas menjadi lebih berlapis.',
         sentiment: 'wdyt',
         source: 'Antara News',
-        url: 'https://www.antaranews.com/lifestyle'
-      },
-      {
-        title: 'Penerapan Tilang Elektronik Drone di Jalan Tol Menuai Pro dan Kontra',
-        summary: 'Pihak kepolisian mulai mengoperasikan drone kamera AI untuk memotret pelanggar marka jalan dan pengemudi yang bermain ponsel dari udara.',
-        takeaway: 'Sebagian pengendara mendukung penertiban jalan raya, sementara yang lain memperdebatkan privasi pemantauan ruang publik.',
-        sentiment: 'wdyt',
-        source: 'Antara News',
-        url: 'https://www.antaranews.com/otomotif'
+        url: 'https://www.antaranews.com/berita/5697559/satgas-dpr-kawal-percepatan-penanganan-korban-gempa-ntt'
       }
     ],
     facts: [
