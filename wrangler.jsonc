@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "intoday",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-16",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "triggers": {
+    "crons": [
+      "0 8 * * *" // Daily at 08:00 UTC (e.g. 15:00 WIB)
+    ]
+  },
+  "vars": {
+    "FROM_EMAIL": "InToday Newsletter <onboarding@resend.dev>",
+    "ORCAROUTER_BASE_URL": "https://api.orcarouter.ai/v1",
+    "ORCAROUTER_MODEL": "orcarouter/auto"
+  }
+}

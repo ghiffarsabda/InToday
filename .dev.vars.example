@@ -1,0 +1,9 @@
+# OrcaRouter API Key (get from https://orcarouter.ai)
+ORCAROUTER_API_KEY=your_orcarouter_api_key_here
+
+# Resend API Key (get from https://resend.com)
+RESEND_API_KEY=re_your_resend_api_key_here
+
+# Optional overrides (defaults in wrangler.jsonc)
+# FROM_EMAIL="InToday <newsletter@yourdomain.com>"
+# ORCAROUTER_MODEL="orcarouter/auto"
