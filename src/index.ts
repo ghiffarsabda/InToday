@@ -71,7 +71,7 @@ export default {
         try {
           const formData = await request.formData();
           const key = formData.get('key');
-          if (key === env.ADMIN_KEY) {
+          if (key && key === env.ADMIN_KEY) {
             return new Response(null, {
               status: 302,
               headers: {
@@ -80,10 +80,22 @@ export default {
               }
             });
           }
+          return renderLoginHtml('Invalid admin password. Please try again.');
         } catch (_) {}
       }
 
       return renderLoginHtml();
+    }
+
+    // Logout endpoint
+    if (path === '/logout') {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          'Location': '/',
+          'Set-Cookie': 'intoday_admin=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0'
+        }
+      });
     }
 
     // 1. Email HTML Preview (Forces fresh live AI generation)
@@ -951,7 +963,12 @@ function checkAuth(request: Request, env: Env): boolean {
   return false;
 }
 
-function renderLoginHtml(): Response {
+function renderLoginHtml(errorMsg?: string): Response {
+  const errorHtml = errorMsg ? `
+    <div style="background: rgba(248, 81, 73, 0.15); color: #f85149; border: 1px solid rgba(248, 81, 73, 0.3); padding: 8px 12px; border-radius: 6px; font-size: 12.5px; margin-bottom: 16px;">
+      ✗ ${errorMsg}
+    </div>` : '';
+
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1002,7 +1019,7 @@ function renderLoginHtml(): Response {
     .desc {
       color: var(--text-muted);
       font-size: 13px;
-      margin-bottom: 24px;
+      margin-bottom: 20px;
     }
     .form-group { margin-bottom: 20px; }
     label {
@@ -1041,10 +1058,11 @@ function renderLoginHtml(): Response {
   <div class="login-card">
     <h1>🔒 InToday Security Gate</h1>
     <div class="desc">Enter your secret ADMIN_KEY to access this console.</div>
+    ${errorHtml}
     <form method="POST" action="/login">
       <div class="form-group">
         <label for="key">Admin Secret Key</label>
-        <input type="password" id="key" name="key" placeholder="Enter ADMIN_KEY" required autofocus />
+        <input type="password" id="key" name="key" placeholder="Enter admin password" required autofocus />
       </div>
       <button type="submit">Verify & Access</button>
     </form>
