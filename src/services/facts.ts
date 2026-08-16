@@ -49,16 +49,16 @@ export async function fetchDailyContent(env: Env): Promise<GeneratedContent> {
   const model = env.ORCAROUTER_MODEL || 'deepseek/deepseek-v4-flash-free';
 
   const globalHeadlinesStr = liveRss.globalNews.length > 0
-    ? liveRss.globalNews.map((n, i) => `${i + 1}. [${n.source}] ${n.title}`).join('\n')
-    : '1. [Reuters] Major international diplomatic talks underway.\n2. [BBC] World economic summit outlines growth projections.';
+    ? liveRss.globalNews.map((n, i) => `${i + 1}. [${n.source}] ${n.title} (URL: ${n.link})`).join('\n')
+    : '1. [Reuters] Major international clean energy milestones achieved.\n2. [BBC] Global economic summit releases latest forecasts.';
 
   const idHeadlinesStr = liveRss.indonesiaNews.length > 0
-    ? liveRss.indonesiaNews.map((n, i) => `${i + 1}. [${n.source}] ${n.title}`).join('\n')
+    ? liveRss.indonesiaNews.map((n, i) => `${i + 1}. [${n.source}] ${n.title} (URL: ${n.link})`).join('\n')
     : '1. [Antara] Pembangunan infrastruktur nasional terus dipercepat.\n2. [Kompas] Pertumbuhan ekonomi kuartal ini catatkan hasil positif.';
 
   const userPrompt = `You write for "InToday", a daily newsletter that provides:
-1. Top 5 Most Important Global News You Can't Miss Today
-2. Top 5 Most Important Indonesia News You Can't Miss Today
+1. Top 5 Most Important Global News
+2. Top 5 Most Important Indonesia News
 3. 4 Fun Facts (easy to understand for junior high schoolers, with real-world examples)
 4. A Glossary of new words
 
@@ -69,20 +69,31 @@ ${globalHeadlinesStr}
 INDONESIA:
 ${idHeadlinesStr}
 
+For every news story, provide:
+- "title": Clear headline
+- "summary": 1-2 simple, easy-to-understand sentences in plain English explaining what happened.
+- "takeaway": 1-2 simple sentences answering: "How does this affect you / everyday people?" (e.g. impact on wallet, travel, technology, daily life, or global future).
+- "source": Source name (e.g. Reuters, BBC, Kompas, Antara, Detik)
+- "url": The exact link provided in the list (or source domain)
+
 Return strictly a JSON object with this exact schema:
 {
   "globalNews": [
     {
-      "title": "Clear Headline",
-      "summary": "1-2 simple, easy-to-understand sentences in plain English explaining what happened and why it matters.",
-      "source": "Source Name (e.g. Reuters, BBC, NYT)"
+      "title": "Headline",
+      "summary": "Simple explanation.",
+      "takeaway": "How this affects you in everyday life.",
+      "source": "Source Name",
+      "url": "https://..."
     }
   ],
   "indonesiaNews": [
     {
-      "title": "Clear Headline",
-      "summary": "1-2 simple, easy-to-understand sentences in plain English explaining the story.",
-      "source": "Source Name (e.g. Antara, Kompas, Detik)"
+      "title": "Headline",
+      "summary": "Simple explanation.",
+      "takeaway": "How this affects you in everyday life.",
+      "source": "Source Name",
+      "url": "https://..."
     }
   ],
   "facts": [
@@ -144,7 +155,7 @@ Return raw JSON ONLY.`;
         model: model,
         messages: messages,
         temperature: 0.5,
-        max_tokens: 3500
+        max_tokens: 3800
       }),
       signal: controller.signal
     });
@@ -193,8 +204,9 @@ function parseAndEnrichContent(
     return {
       title: item.title || matchedRss?.title || 'Global News Update',
       summary: item.summary || 'Important developments happening around the world today.',
+      takeaway: item.takeaway || 'Stay informed about changing global trends and international relations.',
       source: item.source || matchedRss?.source || 'International Press',
-      url: matchedRss?.link
+      url: item.url || matchedRss?.link || 'https://news.google.com'
     };
   });
 
@@ -204,8 +216,9 @@ function parseAndEnrichContent(
     return {
       title: item.title || matchedRss?.title || 'Indonesia News Update',
       summary: item.summary || 'Important developments happening across Indonesia today.',
+      takeaway: item.takeaway || 'This directly affects public services, national economic momentum, or local communities.',
       source: item.source || matchedRss?.source || 'Indonesian Media',
-      url: matchedRss?.link
+      url: item.url || matchedRss?.link || 'https://news.google.com'
     };
   });
 
@@ -252,62 +265,82 @@ function parseAndEnrichContent(
 }
 
 /**
- * Curated fallback content with Top 5 Global, Top 5 Indonesia, Facts, and Glossary
+ * Curated fallback content with clickable links, takeaways, facts, and glossary
  */
 export function getCuratedContentFallback(): GeneratedContent {
   return {
     globalNews: [
       {
-        title: 'Global Renewable Energy Reaches New Milestone',
-        summary: 'Solar and wind power produced more electricity globally this month than fossil fuels in several major economies, marking a historic shift toward clean energy.',
-        source: 'Reuters'
+        title: 'Global Renewable Energy Reaches Record Output',
+        summary: 'Solar and wind power produced more electricity globally this month than fossil fuels across several major economies.',
+        takeaway: 'Cheaper green electricity means cleaner air and lower long-term household utility bills across the world.',
+        source: 'Reuters',
+        url: 'https://www.reuters.com'
       },
       {
-        title: 'International Space Station Welcomes New Global Crew',
-        summary: 'Astronauts from three continents docked safely with the ISS to begin a six-month mission researching microgravity biology.',
-        source: 'BBC News'
+        title: 'International Space Station Welcomes New Crew',
+        summary: 'Astronauts from three continents docked safely with the ISS to begin a mission researching microgravity medicine.',
+        takeaway: 'Medical tests conducted in space help scientists develop better vaccines and treatments for diseases back on Earth.',
+        source: 'BBC News',
+        url: 'https://www.bbc.com/news'
       },
       {
-        title: 'Tech Summit Finalizes Ethical Standards for AI',
-        summary: 'Representatives from 40 nations signed a joint pledge establishing safety and fairness benchmarks for autonomous AI systems.',
-        source: 'The Verge'
+        title: 'Global Tech Summit Finalizes AI Safety Standards',
+        summary: 'Representatives from 40 nations signed a pledge establishing transparency and privacy benchmarks for AI apps.',
+        takeaway: 'New rules ensure AI features in your phone and search engines protect your private data and prevent scams.',
+        source: 'The Verge',
+        url: 'https://www.theverge.com'
       },
       {
-        title: 'Major Breakthrough in Ocean Cleanup Initiative',
-        summary: 'Engineers deployed new floating barrier systems that successfully collected over 100 tons of plastic debris from the Pacific Garbage Patch.',
-        source: 'The Guardian'
+        title: 'Major Breakthrough in Ocean Plastic Cleanup',
+        summary: 'Engineers deployed new floating barrier systems that collected over 100 tons of plastic debris from the Pacific.',
+        takeaway: 'Less plastic in the ocean protects fish populations and keeps microplastics out of the global food supply.',
+        source: 'The Guardian',
+        url: 'https://www.theguardian.com'
       },
       {
-        title: 'Global Semiconductor Supply Chains Rebalance',
-        summary: 'New microchip fabrication facilities opened in Europe and North America, easing global hardware supply shortages.',
-        source: 'Bloomberg'
+        title: 'Global Microchip Supply Chains Stabilize',
+        summary: 'New semiconductor factories opened in Europe and Asia, ending supply shortages for cars and electronics.',
+        takeaway: 'Gadgets like smartphones, game consoles, and laptops will face fewer stock delays and price gouging.',
+        source: 'Bloomberg',
+        url: 'https://www.bloomberg.com'
       }
     ],
     indonesiaNews: [
       {
         title: 'Pembangunan IKN Nusantara Capai Tahap Krusial',
-        summary: 'Fasilitas pemerintahan utama dan jalur transportasi hijau di Ibu Kota Nusantara resmi siap untuk beroperasi penuh.',
-        source: 'Antara News'
+        summary: 'Fasilitas pemerintahan utama dan sistem transportasi hijau di Ibu Kota Nusantara resmi siap untuk beroperasi penuh.',
+        takeaway: 'Pemerataan pusat ekonomi baru di Kalimantan akan membuka ribuan lapangan kerja dan memecah kepadatan di Pulau Jawa.',
+        source: 'Antara News',
+        url: 'https://www.antaranews.com'
       },
       {
         title: 'Ekspor Produk Manufaktur dan Nikel RI Meningkat',
-        summary: 'Hilirisasi industri mineral nasional mencatatkan kenaikan surplus perdagangan ekspor sebesar 12% pada kuartal ini.',
-        source: 'Kompas'
+        summary: 'Hilirisasi industri mineral nasional mencatatkan kenaikan surplus perdagangan ekspor sebesar 12% kuartal ini.',
+        takeaway: 'Cadangan devisa negara yang kuat membantu menstabilkan nilai tukar Rupiah sehingga harga barang impor tidak melonjak.',
+        source: 'Kompas',
+        url: 'https://www.kompas.com'
       },
       {
-        title: 'Program Vaksinasi dan Kesehatan Sekolah Serentak',
-        summary: 'Dinas Kesehatan di berbagai provinsi memulai Bulan Imunisasi Anak Sekolah (BIAS) untuk memperkuat imun puluhan ribu siswa SD.',
-        source: 'Detik News'
+        title: 'Program Vaksinasi Anak Sekolah (BIAS) Digelar Serentak',
+        summary: 'Dinas Kesehatan di berbagai provinsi memulai Bulan Imunisasi Anak Sekolah untuk melindungi puluhan ribu siswa dari penyakit menular.',
+        takeaway: 'Membantu menjaga kekebalan kelompok di lingkungan sekolah sehingga anak-anak dan adik di rumah tidak mudah tertular sakit.',
+        source: 'Detik News',
+        url: 'https://news.detik.com'
       },
       {
         title: 'Kereta Cepat Whoosh Catat Rekor 5 Juta Penumpang',
-        summary: 'Layanan transportasi Whoosh relasi Jakarta-Bandung berhasil melayani lonjakan penumpang liburan dengan ketepatan waktu 99%.',
-        source: 'Tempo'
+        summary: 'Layanan transportasi Whoosh relasi Jakarta-Bandung berhasil melayani lonjakan penumpang dengan ketepatan waktu 99%.',
+        takeaway: 'Perjalanan antar kota makin cepat dan efisien, memangkas waktu tempuh dari 3 jam menjadi cuma 45 menit.',
+        source: 'Tempo',
+        url: 'https://www.tempo.co'
       },
       {
-        title: 'Inovasi Startup Pertanian Lokal Raih Pendanaan Global',
+        title: 'Startup Pertanian Lokal Raih Pendanaan Global',
         summary: 'Platform agritech asal Indonesia yang membantu petani kopi lokal sukses mendapatkan suntikan modal ventura internasional.',
-        source: 'CNBC Indonesia'
+        takeaway: 'Petani lokal bisa menjual hasil panen dengan harga lebih adil langsung ke pembeli tanpa terpotong tengkulak.',
+        source: 'CNBC Indonesia',
+        url: 'https://www.cnbcindonesia.com'
       }
     ],
     facts: [

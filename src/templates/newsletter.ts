@@ -4,8 +4,8 @@ const FONT_STACK = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Not
 
 /**
  * Renders the newsletter in clean GitHub README markdown style with:
- * - Top 5 Global News
- * - Top 5 Indonesia News
+ * - Top 5 Global News with "How this affects you" + Clickable Source Link
+ * - Top 5 Indonesia News with "How this affects you" + Clickable Source Link
  * - 4 Curated Fun Facts with real-world examples
  * - Glossary
  */
@@ -14,30 +14,44 @@ export function renderNewsletterHtml(data: NewsletterData): string {
 
   // Format Global News Section
   const globalNewsHtml = (globalNews || []).map((news, idx) => `
-    <div style="margin-bottom: 18px;">
+    <div style="margin-bottom: 22px;">
       <h3 style="font-family: ${FONT_STACK}; font-size: 15.5px; font-weight: 600; line-height: 1.35; color: #1f2328; margin: 0 0 6px 0;">
         ${idx + 1}. ${news.title}
       </h3>
-      <p style="margin: 0 0 6px 0; font-family: ${FONT_STACK}; font-size: 14px; font-weight: 400; line-height: 1.6; color: #24292f;">
+      
+      <p style="margin: 0 0 8px 0; font-family: ${FONT_STACK}; font-size: 14px; font-weight: 400; line-height: 1.6; color: #24292f;">
         ${news.summary}
       </p>
+
+      <!-- How does this affect you? -->
+      <div style="margin: 0 0 8px 0; padding: 8px 12px; background-color: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; font-family: ${FONT_STACK}; font-size: 13px; line-height: 1.5; color: #24292f;">
+        <strong style="font-weight: 600; color: #0969da;">🤔 How this affects you:</strong> ${news.takeaway}
+      </div>
+
       <div style="font-family: ${FONT_STACK}; font-size: 12px; color: #656d76;">
-        <em>Source:</em> <strong style="font-weight: 600; color: #0969da;">${news.source}</strong>
+        <em>Source:</em> <a href="${news.url || '#'}" target="_blank" style="color: #0969da; text-decoration: underline; font-weight: 500;">${news.source} &#8599;</a>
       </div>
     </div>
   `).join('');
 
   // Format Indonesia News Section
   const idNewsHtml = (indonesiaNews || []).map((news, idx) => `
-    <div style="margin-bottom: 18px;">
+    <div style="margin-bottom: 22px;">
       <h3 style="font-family: ${FONT_STACK}; font-size: 15.5px; font-weight: 600; line-height: 1.35; color: #1f2328; margin: 0 0 6px 0;">
         ${idx + 1}. ${news.title}
       </h3>
-      <p style="margin: 0 0 6px 0; font-family: ${FONT_STACK}; font-size: 14px; font-weight: 400; line-height: 1.6; color: #24292f;">
+
+      <p style="margin: 0 0 8px 0; font-family: ${FONT_STACK}; font-size: 14px; font-weight: 400; line-height: 1.6; color: #24292f;">
         ${news.summary}
       </p>
+
+      <!-- How does this affect you? -->
+      <div style="margin: 0 0 8px 0; padding: 8px 12px; background-color: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; font-family: ${FONT_STACK}; font-size: 13px; line-height: 1.5; color: #24292f;">
+        <strong style="font-weight: 600; color: #0969da;">🤔 How this affects you:</strong> ${news.takeaway}
+      </div>
+
       <div style="font-family: ${FONT_STACK}; font-size: 12px; color: #656d76;">
-        <em>Source:</em> <strong style="font-weight: 600; color: #0969da;">${news.source}</strong>
+        <em>Source:</em> <a href="${news.url || '#'}" target="_blank" style="color: #0969da; text-decoration: underline; font-weight: 500;">${news.source} &#8599;</a>
       </div>
     </div>
   `).join('');
@@ -83,7 +97,7 @@ export function renderNewsletterHtml(data: NewsletterData): string {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style type="text/css">
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    body, table, td, p, h1, h2, h3, blockquote, span, li {
+    body, table, td, p, h1, h2, h3, blockquote, span, li, a {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif !important;
     }
   </style>
@@ -162,14 +176,20 @@ export function renderNewsletterText(data: NewsletterData): string {
   text += `## 🌐 Global News You Can't Miss\n\n`;
   for (let i = 0; i < (globalNews || []).length; i++) {
     const n = globalNews[i];
-    text += `${i + 1}. **${n.title}**\n${n.summary}\nSource: ${n.source}\n\n`;
+    text += `${i + 1}. **${n.title}**\n`;
+    text += `${n.summary}\n`;
+    text += `🤔 How this affects you: ${n.takeaway}\n`;
+    text += `Source: ${n.source} (${n.url || 'https://news.google.com'})\n\n`;
   }
   text += `---\n\n`;
 
   text += `## 🇮🇩 Indonesia News You Can't Miss\n\n`;
   for (let i = 0; i < (indonesiaNews || []).length; i++) {
     const n = indonesiaNews[i];
-    text += `${i + 1}. **${n.title}**\n${n.summary}\nSource: ${n.source}\n\n`;
+    text += `${i + 1}. **${n.title}**\n`;
+    text += `${n.summary}\n`;
+    text += `🤔 How this affects you: ${n.takeaway}\n`;
+    text += `Source: ${n.source} (${n.url || 'https://news.google.com'})\n\n`;
   }
   text += `---\n\n`;
 
