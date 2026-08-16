@@ -1,32 +1,35 @@
 import { NewsletterData } from '../types';
 
-const SANS_FONT_STACK = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+const FONT_STACK = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif";
 
 /**
- * Renders the newsletter as a pure, minimal, GitHub README markdown-style HTML email
- * strictly using sans-serif typography (Inter).
+ * Renders the newsletter adhering strictly to GitHub's markdown typography hierarchy,
+ * font sizes, font weights, and spacing.
  */
 export function renderNewsletterHtml(data: NewsletterData): string {
   const { formattedDate, facts } = data;
 
   const sectionsHtml = facts.map((fact) => {
     return `
-      <!-- ${fact.categoryLabel} Section -->
-      <h2 style="font-family: ${SANS_FONT_STACK}; font-size: 19px; font-weight: 600; line-height: 1.35; color: #1f2328; padding-bottom: 8px; border-bottom: 1px solid #d0d7de; margin: 32px 0 16px 0; letter-spacing: -0.2px;">
+      <!-- ## ${fact.categoryLabel} (GitHub H2 style) -->
+      <h2 style="font-family: ${FONT_STACK}; font-size: 22px; font-weight: 600; line-height: 1.25; color: #1f2328; margin: 28px 0 16px 0; padding-bottom: 0.3em; border-bottom: 1px solid #d0d7de;">
         ${fact.emoji} ${fact.categoryLabel}
       </h2>
 
-      <h3 style="font-family: ${SANS_FONT_STACK}; font-size: 15.5px; font-weight: 600; line-height: 1.4; color: #1f2328; margin: 16px 0 10px 0; letter-spacing: -0.1px;">
+      <!-- ### ${fact.title} (GitHub H3 style) -->
+      <h3 style="font-family: ${FONT_STACK}; font-size: 17px; font-weight: 600; line-height: 1.25; color: #1f2328; margin: 18px 0 10px 0;">
         ${fact.title}
       </h3>
 
-      <blockquote style="margin: 0 0 12px 0; padding: 0 1em; color: #24292f; border-left: 0.25em solid #d0d7de; font-family: ${SANS_FONT_STACK}; font-size: 14.5px; line-height: 1.6;">
-        <p style="margin: 0; font-weight: 500;">
+      <!-- > Fact Blockquote (GitHub Blockquote style) -->
+      <blockquote style="margin: 0 0 14px 0; padding: 0 1em; color: #57606a; border-left: 0.25em solid #d0d7de; font-family: ${FONT_STACK}; font-size: 15px; font-weight: 400; line-height: 1.6;">
+        <p style="margin: 0; color: #1f2328; font-weight: 500;">
           ${fact.fact}
         </p>
       </blockquote>
 
-      <p style="margin: 0 0 16px 0; font-family: ${SANS_FONT_STACK}; font-size: 14px; line-height: 1.65; color: #1f2328;">
+      <!-- Detail Paragraph (GitHub Body style) -->
+      <p style="margin: 0 0 16px 0; font-family: ${FONT_STACK}; font-size: 15px; font-weight: 400; line-height: 1.6; color: #1f2328;">
         ${fact.detail}
       </p>
     `;
@@ -44,20 +47,21 @@ export function renderNewsletterHtml(data: NewsletterData): string {
   <style type="text/css">
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     body, table, td, p, h1, h2, h3, blockquote, span {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif !important;
     }
   </style>
 </head>
-<body style="margin: 0; padding: 24px 16px; background-color: #ffffff; color: #1f2328; font-family: ${SANS_FONT_STACK}; font-size: 14.5px; line-height: 1.6; -webkit-font-smoothing: antialiased;">
+<body style="margin: 0; padding: 32px 16px; background-color: #ffffff; color: #1f2328; font-family: ${FONT_STACK}; font-size: 15px; font-weight: 400; line-height: 1.6; -webkit-font-smoothing: antialiased;">
   
-  <div style="max-width: 640px; margin: 0 auto; background-color: #ffffff;">
+  <div style="max-width: 680px; margin: 0 auto; background-color: #ffffff;">
     
-    <!-- Title / H1 -->
-    <h1 style="font-family: ${SANS_FONT_STACK}; font-size: 24px; font-weight: 700; line-height: 1.25; color: #1f2328; margin: 0 0 12px 0; padding-bottom: 10px; border-bottom: 1px solid #d0d7de; letter-spacing: -0.3px;">
+    <!-- # InToday (GitHub H1 style) -->
+    <h1 style="font-family: ${FONT_STACK}; font-size: 28px; font-weight: 600; line-height: 1.25; color: #1f2328; margin: 0 0 16px 0; padding-bottom: 0.3em; border-bottom: 1px solid #d0d7de;">
       InToday &middot; ${formattedDate}
     </h1>
 
-    <blockquote style="margin: 0 0 24px 0; padding: 0 1em; color: #57606a; border-left: 0.25em solid #d0d7de; font-family: ${SANS_FONT_STACK}; font-size: 13.5px; line-height: 1.5;">
+    <!-- > Subtitle Quote -->
+    <blockquote style="margin: 0 0 24px 0; padding: 0 1em; color: #57606a; border-left: 0.25em solid #d0d7de; font-family: ${FONT_STACK}; font-size: 14px; font-weight: 400; line-height: 1.5;">
       <p style="margin: 0;">
         Daily curated micro-insights across everyday reality, economics, law, and psychology.
       </p>
@@ -66,13 +70,13 @@ export function renderNewsletterHtml(data: NewsletterData): string {
     <!-- Content Sections -->
     ${sectionsHtml}
 
-    <!-- Footer HR and Signature -->
+    <!-- Footer Horizontal Rule & Metadata -->
     <hr style="height: 1px; padding: 0; margin: 36px 0 16px 0; background-color: #d0d7de; border: 0;" />
     
-    <p style="margin: 0 0 4px 0; font-size: 12px; color: #656d76; font-family: ${SANS_FONT_STACK};">
-      Generated by <strong>InToday</strong> &middot; Powered by OrcaRouter &amp; Resend
+    <p style="margin: 0 0 4px 0; font-size: 12px; font-weight: 400; color: #656d76; font-family: ${FONT_STACK};">
+      Generated by <strong style="font-weight: 600; color: #1f2328;">InToday</strong> &middot; Powered by OrcaRouter &amp; Resend
     </p>
-    <p style="margin: 0; font-size: 11px; color: #8c959f; font-family: ${SANS_FONT_STACK};">
+    <p style="margin: 0; font-size: 11px; font-weight: 400; color: #8c959f; font-family: ${FONT_STACK};">
       Private edition &middot; Sent to subscriber list
     </p>
 
