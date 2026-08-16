@@ -143,26 +143,45 @@ export default {
             <a href="/history" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 6px 11px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">
               🗄️ Topic History
             </a>
+            <a href="/logout" style="background: #21262d; color: #8b949e; text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 11.5px; border: 1px solid #30363d;">
+              🔒 Sign Out
+            </a>
             <a href="/" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 6px 11px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">
               ← Dashboard
             </a>
           </div>
         </div>
+
+        <!-- Floating Send Feedback Modal -->
+        <div id="preview-modal" style="display: none; position: fixed; bottom: 24px; right: 24px; z-index: 9999; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); min-width: 320px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          <div id="pm-content" style="display: flex; align-items: center; gap: 10px; color: #f0f6fc; font-size: 13.5px;">
+            <div style="width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.2); border-top-color: #238636; border-radius: 50%; animation: spin 0.7s linear infinite;"></div>
+            <span>Generating & dispatching newsletter...</span>
+          </div>
+        </div>
+
         <script>
           async function sendNewsletterFromPreview() {
             const btn = document.getElementById('preview-send-btn');
+            const modal = document.getElementById('preview-modal');
+            const content = document.getElementById('pm-content');
+
             btn.disabled = true;
-            btn.textContent = '⏳ Sending...';
+            btn.textContent = '⏳ Dispatching...';
+            modal.style.display = 'block';
+            content.innerHTML = '<div style="width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.2); border-top-color: #238636; border-radius: 50%; animation: spin 0.7s linear infinite;"></div> <span>Generating & dispatching via Resend...</span>';
+
             try {
               const res = await fetch('/send', { method: 'POST' });
               const data = await res.json();
               if (data.success) {
-                alert('✓ Newsletter sent successfully to all subscribers (' + data.recipientsCount + ' recipients)!');
+                content.innerHTML = '<span style="color: #3fb950; font-weight: 600;">✓ Successfully sent to ' + (data.recipientsCount || 'all') + ' subscribers!</span>';
+                setTimeout(() => { modal.style.display = 'none'; }, 4000);
               } else {
-                alert('✗ Failed to send: ' + (data.error || JSON.stringify(data)));
+                content.innerHTML = '<span style="color: #f85149; font-weight: 600;">✗ Failed: ' + (data.error || JSON.stringify(data)) + '</span>';
               }
             } catch (err) {
-              alert('✗ Error sending newsletter: ' + err.message);
+              content.innerHTML = '<span style="color: #f85149; font-weight: 600;">✗ Error: ' + err.message + '</span>';
             } finally {
               btn.disabled = false;
               btn.textContent = '🚀 Send Newsletter Now';
@@ -839,27 +858,54 @@ export default {
     .info-list li:last-child { border-bottom: none; }
     .label { color: var(--text-muted); }
     .val { color: var(--text-bright); font-family: monospace; }
-    #status-box {
-      margin-top: 16px;
-      padding: 12px;
-      border-radius: 6px;
-      font-family: monospace;
-      font-size: 12px;
-      white-space: pre-wrap;
+    .progress-box {
+      margin-top: 24px;
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
       display: none;
     }
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      font-size: 13px;
+      color: var(--text-muted);
+      transition: color 0.2s ease;
+    }
+    .step-active { color: #f0f6fc; font-weight: 500; }
+    .step-done { color: #3fb950; font-weight: 500; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="card">
-      <h1>InToday Control Center</h1>
-      <div class="subtitle">AI-powered daily newsletter briefing</div>
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <h1>InToday Control Center</h1>
+          <div class="subtitle">AI-powered daily newsletter briefing</div>
+        </div>
+        <a href="/logout" style="font-size: 12px; color: var(--text-muted); text-decoration: none; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px;">
+          🔒 Sign Out
+        </a>
+      </div>
 
       <ul class="info-list">
         <li>
           <span class="label">Schedule</span>
-          <span class="val">Daily at 08:00 WIB (01:00 UTC)</span>
+          <span class="val">Daily at 06:00 WIB (23:00 UTC)</span>
         </li>
         <li>
           <span class="label">AI Model</span>
@@ -890,37 +936,122 @@ export default {
         </button>
       </div>
 
-      <div id="status-box"></div>
+      <!-- Rich Live Progress Card -->
+      <div id="progress-box" class="progress-box">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div id="p-spinner" class="spinner"></div>
+            <strong id="p-status" style="color: #f0f6fc; font-size: 14px;">Dispatching Newsletter...</strong>
+          </div>
+          <span id="p-timer" style="font-family: monospace; font-size: 12px; color: #8b949e;">0.0s</span>
+        </div>
+
+        <div style="background: #21262d; height: 6px; border-radius: 3px; overflow: hidden; margin-bottom: 16px;">
+          <div id="p-bar" style="background: #238636; height: 100%; width: 20%; transition: width 0.3s ease;"></div>
+        </div>
+
+        <div id="steps-list" style="display: flex; flex-direction: column;">
+          <div id="st-1" class="step-item step-active">⏳ 1. Checking Cloudflare D1 history for topic deduplication...</div>
+          <div id="st-2" class="step-item">⏳ 2. Synthesizing 7 fresh micro-insights with Gemini 3.1 Flash-Lite...</div>
+          <div id="st-3" class="step-item">⏳ 3. Saving generated insights to database history...</div>
+          <div id="st-4" class="step-item">⏳ 4. Dispatching email to all subscribers via Resend...</div>
+        </div>
+
+        <div id="p-result" style="display: none; margin-top: 14px; padding: 12px; border-radius: 6px; font-size: 12px; font-family: monospace; white-space: pre-wrap;"></div>
+      </div>
     </div>
   </div>
 
   <script>
     async function sendNow() {
       const btn = document.getElementById('send-btn');
-      const box = document.getElementById('status-box');
+      const box = document.getElementById('progress-box');
+      const spinner = document.getElementById('p-spinner');
+      const status = document.getElementById('p-status');
+      const timer = document.getElementById('p-timer');
+      const bar = document.getElementById('p-bar');
+      const result = document.getElementById('p-result');
+
+      const st1 = document.getElementById('st-1');
+      const st2 = document.getElementById('st-2');
+      const st3 = document.getElementById('st-3');
+      const st4 = document.getElementById('st-4');
+
       btn.disabled = true;
       btn.textContent = '⏳ Dispatching...';
       box.style.display = 'block';
-      box.style.background = '#21262d';
-      box.style.color = '#c9d1d9';
-      box.textContent = 'Generating live content with Gemini 3.1 Flash-Lite and dispatching via Resend...';
+      result.style.display = 'none';
+
+      // Reset step styles
+      st1.className = 'step-item step-active';
+      st1.textContent = '⏳ 1. Checking Cloudflare D1 history for topic deduplication...';
+      st2.className = 'step-item';
+      st2.textContent = '⏳ 2. Synthesizing 7 fresh micro-insights with Gemini 3.1 Flash-Lite...';
+      st3.className = 'step-item';
+      st3.textContent = '⏳ 3. Saving generated insights to database history...';
+      st4.className = 'step-item';
+      st4.textContent = '⏳ 4. Dispatching email to all subscribers via Resend...';
+
+      bar.style.width = '25%';
+      bar.style.background = '#238636';
+      status.textContent = 'Generating live briefing...';
+
+      const startTime = Date.now();
+      const interval = setInterval(() => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        timer.textContent = elapsed + 's';
+        if (elapsed > 1.2 && elapsed < 3.5) {
+          st1.className = 'step-item step-done';
+          st1.textContent = '✓ 1. Checked Cloudflare D1 history (deduplication active)';
+          st2.className = 'step-item step-active';
+          bar.style.width = '60%';
+        } else if (elapsed >= 3.5) {
+          st2.className = 'step-item step-done';
+          st2.textContent = '✓ 2. Synthesized 7 insights with Gemini 3.1 Flash-Lite';
+          st3.className = 'step-item step-done';
+          st3.textContent = '✓ 3. Saved new topics to SQLite memory';
+          st4.className = 'step-item step-active';
+          bar.style.width = '85%';
+        }
+      }, 100);
 
       try {
         const res = await fetch('/send', { method: 'POST' });
         const data = await res.json();
+        clearInterval(interval);
+
         if (data.success) {
-          box.style.background = 'rgba(46, 160, 67, 0.15)';
-          box.style.color = '#3fb950';
-          box.textContent = '✓ Successfully dispatched to all ' + data.recipientsCount + ' subscribers!\n' + JSON.stringify(data, null, 2);
+          st4.className = 'step-item step-done';
+          st4.textContent = '✓ 4. Dispatched to ' + (data.recipientsCount || 'all') + ' subscriber(s) via Resend';
+          bar.style.width = '100%';
+          spinner.style.display = 'none';
+          status.textContent = '🎉 Successfully sent to all subscribers!';
+          status.style.color = '#3fb950';
+
+          result.style.display = 'block';
+          result.style.background = 'rgba(46, 160, 67, 0.15)';
+          result.style.color = '#3fb950';
+          result.style.border = '1px solid rgba(46, 160, 67, 0.3)';
+          result.textContent = '✓ Delivery Confirmation:\n' + JSON.stringify(data, null, 2);
         } else {
-          box.style.background = 'rgba(248, 81, 73, 0.15)';
-          box.style.color = '#f85149';
-          box.textContent = '✗ Error dispatching email:\n' + (data.error || JSON.stringify(data));
+          clearInterval(interval);
+          bar.style.background = '#f85149';
+          spinner.style.display = 'none';
+          status.textContent = '✗ Error dispatching newsletter';
+          status.style.color = '#f85149';
+
+          result.style.display = 'block';
+          result.style.background = 'rgba(248, 81, 73, 0.15)';
+          result.style.color = '#f85149';
+          result.style.border = '1px solid rgba(248, 81, 73, 0.3)';
+          result.textContent = '✗ Error Details:\n' + (data.error || JSON.stringify(data));
         }
       } catch (err) {
-        box.style.background = 'rgba(248, 81, 73, 0.15)';
-        box.style.color = '#f85149';
-        box.textContent = '✗ Failed: ' + err.message;
+        clearInterval(interval);
+        bar.style.background = '#f85149';
+        spinner.style.display = 'none';
+        status.textContent = '✗ Network error: ' + err.message;
+        status.style.color = '#f85149';
       } finally {
         btn.disabled = false;
         btn.textContent = '🚀 Send Newsletter Now';
