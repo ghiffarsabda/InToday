@@ -1,8 +1,11 @@
-import { Env } from './types';
+import { Env, FactItem } from './types';
 import { RECIPIENT_EMAILS } from './config';
 import { fetchDailyFacts } from './services/facts';
 import { sendDailyNewsletter } from './services/email';
 import { renderNewsletterHtml } from './templates/newsletter';
+
+// In-memory cache for today's generated facts to make subsequent requests instant
+let cachedFacts: { dateKey: string; facts: FactItem[] } | null = null;
 
 export default {
   /**
@@ -18,6 +21,10 @@ export default {
           console.log('[InToday Cron] Fetching daily facts from OrcaRouter...');
           const facts = await fetchDailyFacts(env);
           console.log(`[InToday Cron] Generated ${facts.length} facts successfully.`);
+
+          // Update cache
+          const todayKey = new Date().toISOString().split('T')[0];
+          cachedFacts = { dateKey: todayKey, facts };
 
           console.log(`[InToday Cron] Dispatching email to ${RECIPIENT_EMAILS.length} recipients...`);
           const result = await sendDailyNewsletter(env, facts, RECIPIENT_EMAILS);
@@ -36,24 +43,29 @@ export default {
 
   /**
    * HTTP Fetch Handler
-   * Provides a web dashboard, HTML email live preview, and manual dispatch endpoints.
+   * Provides a web dashboard, fast HTML email preview, and manual dispatch endpoints.
    */
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
+    const todayKey = new Date().toISOString().split('T')[0];
 
-    // 1. Live Email HTML Preview
+    // 1. Email HTML Preview (Instant by default, live AI generation with ?live=true)
     if (path === '/preview') {
       try {
-        let facts;
-        if (env.ORCAROUTER_API_KEY) {
-          try {
-            facts = await fetchDailyFacts(env);
-          } catch (e) {
-            console.warn('Could not fetch live facts, using sample facts for preview:', e);
-            facts = getSampleFacts();
-          }
+        const isLiveRequested = url.searchParams.get('live') === 'true';
+        let facts: FactItem[];
+        let isLiveGenerated = false;
+
+        if (isLiveRequested) {
+          facts = await fetchDailyFacts(env);
+          cachedFacts = { dateKey: todayKey, facts };
+          isLiveGenerated = true;
+        } else if (cachedFacts && cachedFacts.dateKey === todayKey) {
+          facts = cachedFacts.facts;
+          isLiveGenerated = true;
         } else {
+          // Instant default preview with zero wait time
           facts = getSampleFacts();
         }
 
@@ -65,11 +77,29 @@ export default {
           year: 'numeric'
         });
 
-        const html = renderNewsletterHtml({
-          date: date.toISOString().split('T')[0],
+        let html = renderNewsletterHtml({
+          date: todayKey,
           formattedDate,
           facts
         });
+
+        // Add top toolbar banner for preview controls
+        const toolbar = `
+        <div style="background: #161b22; color: #c9d1d9; padding: 10px 16px; border-bottom: 1px solid #30363d; font-family: -apple-system, sans-serif; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <strong style="color: #f0f6fc;">InToday Email Preview:</strong>
+            <span style="background: ${isLiveGenerated ? 'rgba(63, 185, 80, 0.2)' : 'rgba(210, 153, 34, 0.2)'}; color: ${isLiveGenerated ? '#3fb950' : '#d29922'}; padding: 2px 7px; border-radius: 12px; font-size: 11px; font-weight: 600;">
+              ${isLiveGenerated ? '● Live AI Generated' : '○ Instant Sample Mode'}
+            </span>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            ${!isLiveRequested ? '<a href="/preview?live=true" style="background: #238636; color: #ffffff; text-decoration: none; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;">⚡️ Generate Live Facts with AI</a>' : '<a href="/preview" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 5px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">Switch to Instant Sample</a>'}
+            <a href="/" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 5px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">← Dashboard</a>
+          </div>
+        </div>`;
+
+        html = html.replace('<body', '<body style="margin:0;padding:0;"');
+        html = html.replace(/(<body[^>]*>)/i, `$1${toolbar}`);
 
         return new Response(html, {
           headers: { 'Content-Type': 'text/html; charset=utf-8' }
@@ -86,6 +116,7 @@ export default {
     if (path === '/api/facts') {
       try {
         const facts = await fetchDailyFacts(env);
+        cachedFacts = { dateKey: todayKey, facts };
         return new Response(JSON.stringify({ success: true, facts }, null, 2), {
           headers: { 'Content-Type': 'application/json' }
         });
@@ -102,6 +133,8 @@ export default {
       try {
         console.log('[InToday Manual Trigger] Fetching facts...');
         const facts = await fetchDailyFacts(env);
+        cachedFacts = { dateKey: todayKey, facts };
+
         console.log('[InToday Manual Trigger] Sending email...');
         const result = await sendDailyNewsletter(env, facts, RECIPIENT_EMAILS);
 
@@ -231,14 +264,14 @@ export default {
     }
     .recipients-list li { margin-bottom: 4px; }
     .button-group {
-      display: flex;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: 12px;
       margin-top: 24px;
     }
     .btn {
-      flex: 1;
-      padding: 10px 16px;
-      font-size: 13.5px;
+      padding: 10px 14px;
+      font-size: 13px;
       font-weight: 500;
       border-radius: 6px;
       cursor: pointer;
@@ -255,6 +288,10 @@ export default {
       background-color: var(--accent);
       color: #ffffff;
       border-color: rgba(240, 246, 252, 0.1);
+      grid-column: span 2;
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 600;
     }
     .btn-primary:hover { background-color: var(--accent-hover); }
     .btn-secondary {
@@ -289,6 +326,10 @@ export default {
         <span class="status-tag ${hasOrcaKey ? 'status-ok' : 'status-missing'}">${hasOrcaKey ? 'Configured ✓' : 'Missing'}</span>
       </div>
       <div class="status-row">
+        <span>Model</span>
+        <span style="font-family: var(--font-mono); font-size: 12px; color: #58a6ff;">${env.ORCAROUTER_MODEL || 'deepseek/deepseek-v4-flash-free'}</span>
+      </div>
+      <div class="status-row">
         <span>Resend API Key</span>
         <span class="status-tag ${hasResendKey ? 'status-ok' : 'status-missing'}">${hasResendKey ? 'Configured ✓' : 'Missing'}</span>
       </div>
@@ -298,7 +339,7 @@ export default {
       </div>
       <div class="status-row">
         <span>Cron Trigger</span>
-        <span style="font-family: var(--font-mono); font-size: 12px; color: #8b949e;">0 8 * * * (Daily)</span>
+        <span style="font-family: var(--font-mono); font-size: 12px; color: #8b949e;">0 8 * * * (Daily at 08:00 UTC)</span>
       </div>
     </div>
 
@@ -311,10 +352,13 @@ export default {
 
     <div class="button-group">
       <a href="/preview" target="_blank" class="btn btn-secondary">
-        👀 Preview Today's Email
+        ⚡️ Instant Preview (0s)
+      </a>
+      <a href="/preview?live=true" target="_blank" class="btn btn-secondary">
+        🤖 Live AI Preview (5s)
       </a>
       <button id="send-btn" class="btn btn-primary" onclick="sendNow()">
-        🚀 Send Test Newsletter
+        🚀 Send Daily Newsletter to Subscribers
       </button>
     </div>
 
@@ -326,11 +370,11 @@ export default {
       const btn = document.getElementById('send-btn');
       const resultBox = document.getElementById('send-result');
       btn.disabled = true;
-      btn.textContent = 'Sending...';
+      btn.textContent = 'Generating & Sending...';
       resultBox.style.display = 'block';
       resultBox.style.background = '#21262d';
       resultBox.style.color = '#8b949e';
-      resultBox.textContent = 'Triggering AI fact generation and Resend email dispatch...';
+      resultBox.textContent = 'Contacting OrcaRouter AI & dispatching email via Resend...';
 
       try {
         const res = await fetch('/send', { method: 'POST' });
@@ -353,7 +397,7 @@ export default {
         resultBox.textContent = '✗ Request error: ' + err.message;
       } finally {
         btn.disabled = false;
-        btn.textContent = '🚀 Send Test Newsletter';
+        btn.textContent = '🚀 Send Daily Newsletter to Subscribers';
       }
     }
   </script>
@@ -367,12 +411,12 @@ export default {
 };
 
 /**
- * Fallback sample facts for instant preview when API keys are not yet configured.
+ * Fallback sample facts for instant preview with zero wait time.
  */
-function getSampleFacts() {
+function getSampleFacts(): FactItem[] {
   return [
     {
-      category: 'general' as const,
+      category: 'general',
       categoryLabel: 'Anything & Everything',
       emoji: '🌍',
       title: 'Trees Communicate via Fungal Internet',
@@ -380,7 +424,7 @@ function getSampleFacts() {
       detail: 'Older "mother trees" use this fungal lattice to actively nourish younger saplings that receive less sunlight, and can even send chemical distress signals when attacked by pests.'
     },
     {
-      category: 'economics' as const,
+      category: 'economics',
       categoryLabel: 'Economics',
       emoji: '📈',
       title: 'The Cobra Effect and Perverse Incentives',
@@ -388,7 +432,7 @@ function getSampleFacts() {
       detail: 'When the government realized this and canceled the program, breeders released their worthless snakes into the city, leaving Delhi with more cobras than when they started.'
     },
     {
-      category: 'law' as const,
+      category: 'law',
       categoryLabel: 'Law & Governance',
       emoji: '⚖️',
       title: 'The Medieval Legal Trial of Animals',
@@ -396,7 +440,7 @@ function getSampleFacts() {
       detail: 'In 1457 in Savigny, France, a pig was formally tried and convicted of murder with defense counsel present, while its piglets were acquitted due to lack of evidence.'
     },
     {
-      category: 'psychology' as const,
+      category: 'psychology',
       categoryLabel: 'Psychology',
       emoji: '🧠',
       title: 'The Pratfall Effect and Perceived Likability',
