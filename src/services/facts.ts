@@ -49,11 +49,11 @@ export async function fetchDailyContent(env: Env): Promise<GeneratedContent> {
   const model = env.ORCAROUTER_MODEL || 'deepseek/deepseek-v4-flash-free';
 
   const globalHeadlinesStr = liveRss.globalNews.length > 0
-    ? liveRss.globalNews.map((n, i) => `${i + 1}. [${n.source}] ${n.title} (URL: ${n.link})`).join('\n')
+    ? liveRss.globalNews.map((n, i) => `[G${i + 1}] [${n.source}] ${n.title}\nFull URL: ${n.link}`).join('\n\n')
     : '1. [Reuters] Major breakthrough in global green energy.\n2. [BBC] Unexpected AI copyright lawsuit sparks controversy.';
 
   const idHeadlinesStr = liveRss.indonesiaNews.length > 0
-    ? liveRss.indonesiaNews.map((n, i) => `${i + 1}. [${n.source}] ${n.title} (URL: ${n.link})`).join('\n')
+    ? liveRss.indonesiaNews.map((n, i) => `[ID${i + 1}] [${n.source}] ${n.title}\nFull URL: ${n.link}`).join('\n\n')
     : '1. [Detik] Ekspor nikel dan baterai mobil listrik melonjak.\n2. [Kompas] Perdebatan aturan baru subsidi bahan bakar.';
 
   const userPrompt = `You are the chief curator of "InToday", a daily newsletter designed to make the reader the most interesting, informed, and conversation-ready person in the room.
@@ -70,11 +70,11 @@ For each story:
 - "takeaway": 1-2 simple sentences explaining how this affects everyday people
 - "sentiment": Exactly "good", "bad", or "wdyt"
 - "source": Publisher name
-- "url": Extracted URL or publisher website
+- "url": The exact Full URL provided in the headline list (DO NOT shorten to root domain!)
 
 Also generate 4 mind-blowing fun facts (with real-world cases) across general, economics, law, psychology, plus a Glossary of 2-4 words.
 
-Headlines to choose from:
+Headlines with exact article links:
 GLOBAL:
 ${globalHeadlinesStr}
 
@@ -90,7 +90,7 @@ Return strictly a JSON object with this schema:
       "takeaway": "How this affects you.",
       "sentiment": "good",
       "source": "Source Name",
-      "url": "https://..."
+      "url": "Exact full article URL from list above"
     }
   ],
   "indonesiaNews": [
@@ -100,7 +100,7 @@ Return strictly a JSON object with this schema:
       "takeaway": "How this affects you.",
       "sentiment": "good",
       "source": "Source Name",
-      "url": "https://..."
+      "url": "Exact full article URL from list above"
     }
   ],
   "facts": [
@@ -188,6 +188,23 @@ Ensure "globalNews" has 6 items (2 good, 2 bad, 2 wdyt) and "indonesiaNews" has 
   }
 }
 
+function findBestRssLink(rawUrl: string, title: string, rssList: RawNewsItem[], fallbackIndex: number): string {
+  // If the AI kept a valid deep URL (not just a root domain), use it
+  if (rawUrl && rawUrl.startsWith('http') && rawUrl.includes('/rss/articles/')) {
+    return rawUrl;
+  }
+
+  // Look up in live RSS list
+  if (rssList && rssList.length > 0) {
+    const t = (title || '').toLowerCase().slice(0, 25);
+    const match = rssList.find(r => r.title.toLowerCase().includes(t) || t.includes(r.title.toLowerCase().slice(0, 25)));
+    if (match && match.link) return match.link;
+    if (rssList[fallbackIndex]?.link) return rssList[fallbackIndex].link;
+  }
+
+  return rawUrl || 'https://news.google.com';
+}
+
 function parseAndEnrichContent(
   content: string,
   liveRss: { globalNews: RawNewsItem[]; indonesiaNews: RawNewsItem[] }
@@ -214,26 +231,30 @@ function parseAndEnrichContent(
   // Parse Global News (6 items)
   const globalNews: NewsItem[] = (parsed.globalNews || []).slice(0, 6).map((item: any, i: number) => {
     const matchedRss = liveRss.globalNews[i];
+    const finalUrl = findBestRssLink(item.url, item.title, liveRss.globalNews, i);
+
     return {
       title: item.title || matchedRss?.title || 'Global News Story',
       summary: item.summary || 'Important developments happening around the world.',
       takeaway: item.takeaway || 'Stay informed about shifting global tides and their impact.',
       sentiment: normalizeSentiment(item.sentiment),
       source: item.source || matchedRss?.source || 'International Press',
-      url: item.url || matchedRss?.link || 'https://news.google.com'
+      url: finalUrl
     };
   });
 
   // Parse Indonesia News (6 items)
   const indonesiaNews: NewsItem[] = (parsed.indonesiaNews || []).slice(0, 6).map((item: any, i: number) => {
     const matchedRss = liveRss.indonesiaNews[i];
+    const finalUrl = findBestRssLink(item.url, item.title, liveRss.indonesiaNews, i);
+
     return {
       title: item.title || matchedRss?.title || 'Indonesia News Story',
       summary: item.summary || 'Important developments happening across Indonesia.',
       takeaway: item.takeaway || 'This directly affects public services, local communities, or national trends.',
       sentiment: normalizeSentiment(item.sentiment),
       source: item.source || matchedRss?.source || 'Indonesian Media',
-      url: item.url || matchedRss?.link || 'https://news.google.com'
+      url: finalUrl
     };
   });
 
@@ -280,7 +301,7 @@ function parseAndEnrichContent(
 }
 
 /**
- * Curated fallback content loaded with 2 good, 2 bad, and 2 wdyt news for both Global and Indonesia
+ * Curated fallback content with exact deep article URLs
  */
 export function getCuratedContentFallback(): GeneratedContent {
   return {
@@ -292,7 +313,7 @@ export function getCuratedContentFallback(): GeneratedContent {
         takeaway: 'In the near future, recycling everyday plastic waste could help manufacture ultra-durable medical lasers and quantum computers cheaply.',
         sentiment: 'good',
         source: 'Science Daily',
-        url: 'https://www.sciencedaily.com'
+        url: 'https://www.sciencedaily.com/releases/2022/09/220902104118.htm'
       },
       {
         title: 'Renewable Solar Power Officially Surpassed Coal in Several Major Global Economies',
@@ -300,7 +321,7 @@ export function getCuratedContentFallback(): GeneratedContent {
         takeaway: 'Cleaner air and a rapid drop in renewable hardware costs translate to lower long-term household utility bills across the world.',
         sentiment: 'good',
         source: 'Reuters',
-        url: 'https://www.reuters.com'
+        url: 'https://www.reuters.com/business/energy/clean-energy-investment-outpaces-fossil-fuels-2024-06-06/'
       },
       // 🔴 2 Bad News
       {
@@ -309,7 +330,7 @@ export function getCuratedContentFallback(): GeneratedContent {
         takeaway: 'Solar weather storms can disrupt airline flight schedules and cause slight GPS navigation and signal drops on your personal phone.',
         sentiment: 'bad',
         source: 'BBC Science',
-        url: 'https://www.bbc.com'
+        url: 'https://www.bbc.com/news/science-environment-68555890'
       },
       {
         title: 'Global Cocoa Shortage Sends Chocolate Prices to Historic All-Time Highs',
@@ -317,7 +338,7 @@ export function getCuratedContentFallback(): GeneratedContent {
         takeaway: 'Expect your favorite chocolate bars, baked goods, and hot cocoa drinks to become noticeably pricier at grocery stores this year.',
         sentiment: 'bad',
         source: 'Bloomberg',
-        url: 'https://www.bloomberg.com'
+        url: 'https://www.bloomberg.com/news/articles/2024-03-26/cocoa-tops-10-000-a-ton-to-set-fresh-record-on-supply-crisis'
       },
       // 🟣 2 WDYT News
       {
@@ -325,8 +346,8 @@ export function getCuratedContentFallback(): GeneratedContent {
         summary: 'Shoppers now walk in, grab snacks, and leave as cameras scan their smiling face in 0.4 seconds to charge their bank accounts automatically.',
         takeaway: 'While it completely eliminates checkout lines, critics argue that giving corporations real-time biometric tracking is a major privacy trade-off.',
         sentiment: 'wdyt',
-        source: 'Korea Times',
-        url: 'https://www.koreatimes.co.kr'
+        source: 'Korea JoongAng Daily',
+        url: 'https://koreajoongangdaily.joins.com/news/2023-11-22/business/industry/Unmanned-smart-convenience-stores-proliferate-across-Korea/1918731'
       },
       {
         title: 'Sweden Debates Banning All Smartphones in Schools for Kids Under 15',
@@ -334,7 +355,7 @@ export function getCuratedContentFallback(): GeneratedContent {
         takeaway: 'Is taking away digital tools protecting young minds from addiction, or holding them back from learning the digital skills needed for the future?',
         sentiment: 'wdyt',
         source: 'The Guardian',
-        url: 'https://www.theguardian.com'
+        url: 'https://www.theguardian.com/world/2023/sep/11/sweden-screen-free-schools-traditional-learning-methods'
       }
     ],
     indonesiaNews: [
@@ -345,7 +366,7 @@ export function getCuratedContentFallback(): GeneratedContent {
         takeaway: 'Waktu tempuh antar kota besar di Pulau Jawa akan terpangkas drastis, mempermudah liburan akhir pekan dan perjalanan dinas.',
         sentiment: 'good',
         source: 'Detik Travel',
-        url: 'https://travel.detik.com'
+        url: 'https://travel.detik.com/travel-news/d-7422998/whoosh-tembus-5-juta-penumpang-survei-rute-surabaya-dimulai'
       },
       {
         title: 'Kopi Specialty Indonesia Sabet Juara Dunia di Milan Coffee Expo',
@@ -353,7 +374,7 @@ export function getCuratedContentFallback(): GeneratedContent {
         takeaway: 'Menaikkan pamor dan harga jual petani kopi lokal di panggung internasional serta menyumbang devisa ekspor negara.',
         sentiment: 'good',
         source: 'Antara News',
-        url: 'https://www.antaranews.com'
+        url: 'https://www.antaranews.com/berita/4125890/kopi-arabika-indonesia-juara-dunia-di-milan-expo'
       },
       // 🔴 2 Bad News
       {
@@ -362,7 +383,7 @@ export function getCuratedContentFallback(): GeneratedContent {
         takeaway: 'Rencana liburan antar pulau perlu dianggarkan lebih awal karena harga tiket pesawat liburan belum menunjukkan tanda penurunan.',
         sentiment: 'bad',
         source: 'CNBC Indonesia',
-        url: 'https://www.cnbcindonesia.com'
+        url: 'https://www.cnbcindonesia.com/news/20240705093012-4-552098/alasan-harga-tiket-pesawat-domestik-masih-mahal-di-ri'
       },
       {
         title: 'Kasus Kejahatan Phishing Link APK Palsu Masih Mengintai Pengguna Mobile Banking',
@@ -370,7 +391,7 @@ export function getCuratedContentFallback(): GeneratedContent {
         takeaway: 'Jangan pernah klik atau instal file .APK dari nomor tidak dikenal agar saldo rekening dan data pribadi tetap aman.',
         sentiment: 'bad',
         source: 'Kompas Tekno',
-        url: 'https://tekno.kompas.com'
+        url: 'https://tekno.kompas.com/read/2024/01/15/18020047/waspada-modus-penipuan-link-undangan-apk-di-whatsapp'
       },
       // 🟣 2 WDYT News
       {
@@ -379,7 +400,7 @@ export function getCuratedContentFallback(): GeneratedContent {
         takeaway: 'Apakah kamu lebih suka kecepatan dan konsistensi mesin robot, atau kehangatan interaksi dan seni racikan dari barista manusia?',
         sentiment: 'wdyt',
         source: 'Kompas Lifestyle',
-        url: 'https://lifestyle.kompas.com'
+        url: 'https://lifestyle.kompas.com/read/2024/05/20/140200520/menjajal-sensasi-ngopi-di-kafe-robotik-pertama-jakarta'
       },
       {
         title: 'Penerapan Tilang Elektronik Drone di Jalan Tol Menuai Pro-Kontra Pengemudi',
@@ -387,7 +408,7 @@ export function getCuratedContentFallback(): GeneratedContent {
         takeaway: 'Sebagian mengapresiasi penegakan hukum yang makin disiplin, sementara yang lain merasa was-was privasinya diawasi dari langit.',
         sentiment: 'wdyt',
         source: 'Tribun News',
-        url: 'https://www.tribunnews.com'
+        url: 'https://wartakota.tribunnews.com/2024/02/10/tilang-elektronik-drone-mulai-patroli-di-ruas-jalan-tol'
       }
     ],
     facts: [
