@@ -76,7 +76,7 @@ export default {
               status: 302,
               headers: {
                 'Location': '/',
-                'Set-Cookie': `intoday_admin=${key}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`
+                'Set-Cookie': `intoday_admin=${key}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`
               }
             });
           }
@@ -172,7 +172,14 @@ export default {
             content.innerHTML = '<div style="width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.2); border-top-color: #238636; border-radius: 50%; animation: spin 0.7s linear infinite;"></div> <span>Generating & dispatching via Resend...</span>';
 
             try {
-              const res = await fetch('/send', { method: 'POST' });
+              const res = await fetch('/send', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                  'X-Admin-Key': '${env.ADMIN_KEY || ''}',
+                  'Content-Type': 'application/json'
+                }
+              });
               const data = await res.json();
               if (data.success) {
                 content.innerHTML = '<span style="color: #3fb950; font-weight: 600;">✓ Successfully sent to ' + (data.recipientsCount || 'all') + ' subscribers!</span>';
@@ -1016,8 +1023,17 @@ export default {
       }, 100);
 
       try {
-        const res = await fetch('/send', { method: 'POST' });
+        console.log('[InToday] Initiating send request...');
+        const res = await fetch('/send', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'X-Admin-Key': '${env.ADMIN_KEY || ''}',
+            'Content-Type': 'application/json'
+          }
+        });
         const data = await res.json();
+        console.log('[InToday] Send response:', data);
         clearInterval(interval);
 
         if (data.success) {
