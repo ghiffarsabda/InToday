@@ -1,5 +1,5 @@
 import { Env, FactCategory, FactItem, GlossaryItem } from '../types';
-import { getRecentTopics, saveGeneratedFacts } from './db';
+import { getRecentTopicTitles, saveGeneratedFacts } from './db';
 import { generateContentWithGemini } from './gemini';
 
 interface ChatResponse {
@@ -82,17 +82,17 @@ async function fetchWithOpenRouterOrOrca(env: Env): Promise<GeneratedContent> {
     throw new Error('No AI provider API keys configured in environment.');
   }
 
-  let pastTopics: Array<{ category: string; title: string; fact: string }> = [];
+  let pastTitles: Array<{ category: string; title: string }> = [];
   try {
-    pastTopics = await getRecentTopics(env.DB, 50);
+    pastTitles = await getRecentTopicTitles(env.DB, 60);
   } catch (e) {
     // Proceed without history if DB is empty
   }
 
   let pastTopicsPrompt = '';
-  if (pastTopics.length > 0) {
-    const lines = pastTopics.slice(0, 25).map(t => `- [${t.category}] ${t.title}`);
-    pastTopicsPrompt = `\n\nALREADY DISCUSSED TOPICS IN DATABASE (CRITICAL: DO NOT REPEAT ANY OF THESE TOPICS OR THEMES):\n${lines.join('\n')}\n`;
+  if (pastTitles.length > 0) {
+    const lines = pastTitles.map(t => `- [${t.category}] ${t.title}`);
+    pastTopicsPrompt = `\n\nALREADY DISCUSSED TOPIC TITLES (CRITICAL: DO NOT REPEAT ANY OF THESE CONCEPTS):\n${lines.join('\n')}\n`;
   }
 
   const timestamp = `${Date.now()}_${Math.random().toString(36).substring(7)}`;

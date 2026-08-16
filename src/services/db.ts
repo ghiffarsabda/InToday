@@ -9,6 +9,11 @@ export interface HistoryRecord {
   created_at: string;
 }
 
+export interface TopicTitleOnly {
+  category: string;
+  title: string;
+}
+
 /**
  * Initializes the history database table if it doesn't already exist.
  */
@@ -22,9 +27,27 @@ export async function initDb(db?: D1Database): Promise<void> {
 }
 
 /**
- * Retrieves the most recent historical topics to avoid repetition.
+ * Retrieves only category & title to minimize input token usage in AI prompts.
  */
-export async function getRecentTopics(db?: D1Database, limit = 50): Promise<HistoryRecord[]> {
+export async function getRecentTopicTitles(db?: D1Database, limit = 60): Promise<TopicTitleOnly[]> {
+  if (!db) return [];
+  try {
+    await initDb(db);
+    const { results } = await db
+      .prepare(`SELECT category, title FROM history ORDER BY id DESC LIMIT ?`)
+      .bind(limit)
+      .all<TopicTitleOnly>();
+    return results || [];
+  } catch (err) {
+    console.warn('[DB] Error querying topic titles:', err);
+    return [];
+  }
+}
+
+/**
+ * Retrieves the full historical topics for the /history viewer.
+ */
+export async function getRecentTopics(db?: D1Database, limit = 150): Promise<HistoryRecord[]> {
   if (!db) return [];
   try {
     await initDb(db);

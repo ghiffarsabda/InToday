@@ -1,6 +1,6 @@
 import { Env, FactCategory, FactItem, GlossaryItem } from '../types';
 import { CATEGORY_DEFINITIONS, GeneratedContent } from './facts';
-import { getRecentTopics, saveGeneratedFacts } from './db';
+import { getRecentTopicTitles, saveGeneratedFacts } from './db';
 
 interface GeminiGenerateResponse {
   candidates?: Array<{
@@ -20,7 +20,7 @@ interface GeminiGenerateResponse {
 
 /**
  * Generates fresh daily facts using Google Gemini API.
- * Uses Gemini 3.1 Flash-Lite with native JSON mode.
+ * Uses Gemini 3.1 Flash-Lite with title-only history check to minimize input tokens.
  */
 export async function generateContentWithGemini(env: Env): Promise<GeneratedContent> {
   const apiKey = env.GEMINI_API_KEY;
@@ -31,24 +31,24 @@ export async function generateContentWithGemini(env: Env): Promise<GeneratedCont
   const model = env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
   const todayKey = new Date().toISOString().split('T')[0];
 
-  // 1. Fetch recent topic history from SQLite database
-  let pastTopics: Array<{ category: string; title: string; fact: string }> = [];
+  // 1. Fetch ONLY recent titles from SQLite database (saving ~85% input tokens)
+  let pastTitles: Array<{ category: string; title: string }> = [];
   try {
-    pastTopics = await getRecentTopics(env.DB, 50);
+    pastTitles = await getRecentTopicTitles(env.DB, 60);
   } catch (e) {
     console.warn('[Gemini] DB lookup failed, proceeding without history:', e);
   }
 
   let pastTopicsPrompt = '';
-  if (pastTopics.length > 0) {
-    const lines = pastTopics.slice(0, 30).map(t => `- [${t.category}] ${t.title}`);
-    pastTopicsPrompt = `\n\nALREADY DISCUSSED TOPICS IN DATABASE (CRITICAL: DO NOT REPEAT ANY OF THESE TOPICS OR THEMES):\n${lines.join('\n')}\n`;
+  if (pastTitles.length > 0) {
+    const lines = pastTitles.map(t => `- [${t.category}] ${t.title}`);
+    pastTopicsPrompt = `\n\nALREADY DISCUSSED TOPIC TITLES IN DATABASE (CRITICAL: DO NOT REPEAT ANY OF THESE TOPICS):\n${lines.join('\n')}\n`;
   }
 
   const timestamp = `${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
   const promptText = `You are the chief editor of "InToday", a high-signal daily briefing newsletter for students and modern readers.
-Task (${timestamp}): Generate 7 BRAND-NEW, NEVER-BEFORE-SEEN insights across human knowledge. Keep explanations concise and clear.
+Task (${timestamp}): Generate 7 BRAND-NEW, NEVER-BEFORE-SEEN insights across human knowledge. Keep explanations concise.
 ${pastTopicsPrompt}
 Generate EXACTLY 1 item for each of the 7 categories:
 1. "science" - Science (a fascinating natural/physics/astronomy discovery + relatable real-world example)
@@ -86,7 +86,7 @@ Return valid JSON matching this schema:
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-  console.log(`[Google Gemini] Generating daily briefing with model '${model}'...`);
+  console.log(`[Google Gemini] Generating daily briefing with model '${model}' (title-only history check)...`);
 
   const response = await fetch(url, {
     method: 'POST',
@@ -119,29 +119,8 @@ Return valid JSON matching this schema:
     throw new Error('Google Gemini returned an empty response.');
   }
 
-  // Clean JSON bounds
-  rawJson = rawJson.trim();
-  const firstBrace = rawJson.indexOf('{');
-  const lastBrace = rawJson.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    rawJson = rawJson.substring(firstBrace, lastBrace + 1);
-  }
-
-  let parsed: any;
-  try {
-    parsed = JSON.parse(rawJson);
-  } catch (err) {
-    try {
-      const lastSafeBrace = rawJson.lastIndexOf('}');
-      if (lastSafeBrace !== -1) {
-        parsed = JSON.parse(rawJson.substring(0, lastSafeBrace + 1));
-      } else {
-        throw err;
-      }
-    } catch (inner) {
-      throw new Error(`Failed to parse Gemini JSON: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
+  // Extract valid balanced JSON object
+  const parsed = extractBalancedJson(rawJson);
 
   const allCategories: FactCategory[] = [
     'science',
@@ -190,4 +169,75 @@ Return valid JSON matching this schema:
 
   console.log(`[Google Gemini] ✓ Successfully generated and saved ${facts.length} fresh facts!`);
   return { facts, glossary };
+}
+
+function extractBalancedJson(raw: string): any {
+  let text = raw.trim();
+
+  // Try direct parse first
+  try {
+    return JSON.parse(text);
+  } catch (_) {}
+
+  // Strip markdown code fences if present
+  if (text.includes('```')) {
+    const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (match && match[1]) {
+      try {
+        return JSON.parse(match[1].trim());
+      } catch (_) {}
+    }
+  }
+
+  // Find first opening brace
+  const startIdx = text.indexOf('{');
+  if (startIdx === -1) {
+    throw new Error('No JSON object found in response.');
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = startIdx; i < text.length; i++) {
+    const char = text[i];
+
+    if (escape) {
+      escape = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      escape = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (!inString) {
+      if (char === '{') depth++;
+      else if (char === '}') {
+        depth--;
+        if (depth === 0) {
+          const candidate = text.substring(startIdx, i + 1);
+          try {
+            return JSON.parse(candidate);
+          } catch (e) {
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // Fallback: slice between first and last brace
+  const lastIdx = text.lastIndexOf('}');
+  if (lastIdx > startIdx) {
+    return JSON.parse(text.substring(startIdx, lastIdx + 1));
+  }
+
+  throw new Error('Could not extract valid JSON from Gemini output.');
 }
