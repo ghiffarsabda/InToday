@@ -1,6 +1,6 @@
 import { Env } from './types';
 import { RECIPIENT_EMAILS } from './config';
-import { fetchDailyContent, getCuratedContentFallback, GeneratedContent } from './services/facts';
+import { fetchDailyContent, GeneratedContent } from './services/facts';
 import { sendDailyNewsletter } from './services/email';
 import { renderNewsletterHtml } from './templates/newsletter';
 
@@ -50,21 +50,11 @@ export default {
     const path = url.pathname;
     const todayKey = new Date().toISOString().split('T')[0];
 
-    // 1. Email HTML Preview (Generates live content dynamically)
+    // 1. Email HTML Preview (Always forces fresh live AI generation)
     if (path === '/preview') {
       try {
-        const isSample = url.searchParams.get('sample') === 'true';
-        let content: GeneratedContent;
-        let isLiveGenerated = true;
-
-        if (isSample) {
-          content = getCuratedContentFallback();
-          isLiveGenerated = false;
-        } else {
-          // Always generate a fresh batch of live facts by default!
-          content = await fetchDailyContent(env);
-          cachedContent = { dateKey: todayKey, content };
-        }
+        const content = await fetchDailyContent(env);
+        cachedContent = { dateKey: todayKey, content };
 
         const date = new Date();
         const formattedDate = date.toLocaleDateString('en-US', {
@@ -88,15 +78,14 @@ export default {
         <div style="background: #161b22; color: #c9d1d9; padding: 12px 18px; border-bottom: 1px solid #30363d; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
           <div style="display: flex; align-items: center; gap: 10px;">
             <strong style="color: #f0f6fc; font-size: 13.5px;">InToday Newsletter Preview</strong>
-            <span style="background: ${isLiveGenerated ? 'rgba(63, 185, 80, 0.2)' : 'rgba(210, 153, 34, 0.2)'}; color: ${isLiveGenerated ? '#3fb950' : '#d29922'}; padding: 3px 9px; border-radius: 12px; font-size: 11.5px; font-weight: 600;">
-              ${isLiveGenerated ? '⚡ Live AI Generated' : '○ Static Sample Mode'}
+            <span style="background: rgba(63, 185, 80, 0.2); color: #3fb950; padding: 3px 9px; border-radius: 12px; font-size: 11.5px; font-weight: 600;">
+              ⚡ Live AI Generated (${content.facts.length} items)
             </span>
           </div>
           <div style="display: flex; gap: 10px;">
             <a href="/preview?t=${randomToken}" style="background: #238636; color: #ffffff; text-decoration: none; padding: 6px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.3);">
               🔄 Generate New Facts
             </a>
-            ${isLiveGenerated ? '<a href="/preview?sample=true" style="background: #21262d; color: #8b949e; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">View Static Sample</a>' : ''}
             <a href="/" style="background: #21262d; color: #c9d1d9; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #30363d;">← Dashboard</a>
           </div>
         </div>`;
@@ -111,24 +100,18 @@ export default {
           }
         });
       } catch (err) {
-        return new Response(`Error generating preview: ${err instanceof Error ? err.message : String(err)}`, {
-          status: 500,
-          headers: { 'Content-Type': 'text/plain' }
-        });
+        return new Response(
+          `Error generating live preview: ${err instanceof Error ? err.message : String(err)}`,
+          { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+        );
       }
     }
 
-    // 2. Fetch Facts JSON API
+    // 2. Fetch Facts JSON API (Always live)
     if (path === '/api/facts' || path === '/api/content') {
       try {
-        const isFresh = url.searchParams.get('fresh') === 'true' || url.searchParams.get('live') === 'true';
-        let content: GeneratedContent;
-        if (isFresh || !cachedContent || cachedContent.dateKey !== todayKey) {
-          content = await fetchDailyContent(env);
-          cachedContent = { dateKey: todayKey, content };
-        } else {
-          content = cachedContent.content;
-        }
+        const content = await fetchDailyContent(env);
+        cachedContent = { dateKey: todayKey, content };
 
         return new Response(JSON.stringify({ success: true, content }, null, 2), {
           headers: {
